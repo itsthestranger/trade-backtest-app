@@ -20,6 +20,7 @@ import ConfluencesChecklist from './ConfluencesChecklist';
 import BodyMindCheck from './BodyMindCheck';
 import PlaybookHeatmap from './PlaybookHeatmap';
 import PositionCalculator from './PositionCalculator';
+import ConfirmationCandleHeatmap from './ConfirmationCandleHeatmap';
 
 const TradePlanner = ({ onCreateTrade, onClose }) => {
   const { instruments, isLoading: settingsLoading } = useSettings();
@@ -55,6 +56,9 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
     target: 0,
     contracts: 0
   });
+
+  const [confirmationHeatmapData, setConfirmationHeatmapData] = useState(null);
+  const [selectedConfirmationCandle, setSelectedConfirmationCandle] = useState(null);
   
   // Options for dropdowns
   const confirmationTypes = [
@@ -181,6 +185,11 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
         days: [formState.day],
         session: formState.session
       };
+
+      // If we have a selected confirmation candle, add it to the filter for entry heatmap
+      if (selectedConfirmationCandle) {
+        filter.confirmation_time = selectedConfirmationCandle;
+      }
       
       const backtests = await db.getTrades(filter);
       setBacktestData(backtests);
@@ -192,9 +201,28 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
       } else {
         setEntriesHeatmap(null);
       }
+
+      // Process data for confirmation candle heatmap
+      // This doesn't filter by confirmation_time even if one is selected
+      const fullFilter = {
+        instrument_id: formState.instrument,
+        confirmation_type: formState.confirmationType,
+        direction: formState.direction,
+        days: [formState.day],
+        session: formState.session
+      };
+      
+      const allBacktests = await db.getTrades(fullFilter);
+      if (allBacktests.length > 0) {
+        const candleHeatmapData = processDataForConfirmationHeatmap(allBacktests);
+        setConfirmationHeatmapData(candleHeatmapData);
+      } else {
+        setConfirmationHeatmapData(null);
+      }
       
       // Get playbook data if confirmation candle is also selected
-      if (formState.confirmationCandle) {
+      if (formState.confirmationCandle || selectedConfirmationCandle) {
+        const confirmationTime = formState.confirmationCandle || selectedConfirmationCandle;
         // Find playbook for the instrument
         const playbooks = await db.getPlaybooks();
         const instrumentPlaybooks = playbooks.filter(p => p.instrument_id === formState.instrument);
@@ -207,7 +235,7 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
           const matchingEntry = playbookEntries.entries.find(entry => 
             entry.day === formState.day &&
             entry.direction === formState.direction &&
-            entry.confirmation_time === formState.confirmationCandle
+            entry.confirmation_time === confirmationTime
           );
           
           setPlaybookData(matchingEntry || null);
@@ -222,6 +250,88 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
       setError('Failed to load trade data. Please try again.');
       setIsLoading(false);
     }
+  };
+
+  // Add this function to process data for confirmation heatmap
+  const processDataForConfirmationHeatmap = (backtests) => {
+    // Create a map of confirmation times to results
+    const candleMap = {};
+    
+    // Get all possible confirmation times based on session
+    const session = formState.session;
+    const confirmationTimes = [];
+    
+    if (session === 'ODR') {
+      // Generate times from 4:00 to 8:25 in 5-minute intervals
+      let hour = 4;
+      let minute = 0;
+      
+      while (hour < 9 || (hour === 8 && minute <= 25)) {
+        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        confirmationTimes.push(timeStr);
+        candleMap[timeStr] = { trades: [], totalR: 0, winrate: 0 };
+        
+        minute += 5;
+        if (minute >= 60) {
+          minute = 0;
+          hour += 1;
+        }
+      }
+    } else if (session === 'RDR') {
+      // Generate times from 10:30 to 15:55 in 5-minute intervals
+      let hour = 10;
+      let minute = 30;
+      
+      while (hour < 16 || (hour === 15 && minute <= 55)) {
+        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        confirmationTimes.push(timeStr);
+        candleMap[timeStr] = { trades: [], totalR: 0, winrate: 0 };
+        
+        minute += 5;
+        if (minute >= 60) {
+          minute = 0;
+          hour += 1;
+        }
+      }
+    }
+    
+    // Group backtests by confirmation time
+    backtests.forEach(trade => {
+      const confirmationTime = trade.confirmation_time;
+      
+      if (candleMap[confirmationTime]) {
+        candleMap[confirmationTime].trades.push(trade);
+        candleMap[confirmationTime].totalR += trade.result || 0;
+      }
+    });
+    
+    // Calculate winrate and prepare final data
+    Object.keys(candleMap).forEach(time => {
+      const data = candleMap[time];
+      // Exclude break-even trades from winrate calculation
+      const totalTradesForWinrate = data.trades.filter(
+        t => t.status === 'Winner' || t.status === 'Expense'
+      ).length;
+      const winners = data.trades.filter(t => t.status === 'Winner').length;
+      data.winrate = totalTradesForWinrate > 0 ? (winners / totalTradesForWinrate) * 100 : 0;
+    });
+    
+    // Find best confirmation time
+    let bestConfirmationTime = null;
+    let bestR = Number.NEGATIVE_INFINITY;
+    
+    Object.keys(candleMap).forEach(time => {
+      const data = candleMap[time];
+      if (data.totalR > bestR && data.trades.length > 0) {
+        bestR = data.totalR;
+        bestConfirmationTime = time;
+      }
+    });
+    
+    return {
+      candleMap,
+      bestConfirmationTime
+    };
   };
   
   // Process backtest data for heatmap
@@ -301,6 +411,32 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
       bestEntryTime
     };
   };
+
+  // Add handler for confirmation candle selection
+  const handleConfirmationCandleSelect = (candleTime) => {
+    setSelectedConfirmationCandle(candleTime);
+    // Update form state to match selected candle
+    setFormState(prevState => ({
+      ...prevState,
+      confirmationCandle: candleTime
+    }));
+    // Refetch data with the new selection
+    fetchData();
+  };
+
+  // Add useEffect to refetch data when selectedConfirmationCandle changes
+  useEffect(() => {
+    if (
+      formState.instrument &&
+      formState.confirmationType &&
+      formState.direction &&
+      formState.day &&
+      formState.session
+    ) {
+      fetchData();
+    }
+  }, [formState.instrument, formState.confirmationType, formState.direction, 
+      formState.day, formState.session, selectedConfirmationCandle]);
   
   // Handle save as planned
   const handleSaveAsPlanned = async () => {
@@ -497,7 +633,16 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
             </Select>
           </FormControl>
         </Grid>
-        
+        {/* Confirmation Candle Heatmap - add this to the grid */}
+        <Grid item xs={12} md={6}>
+          <ConfirmationCandleHeatmap 
+            data={confirmationHeatmapData} 
+            session={formState.session}
+            isLoading={isLoading}
+            onCandleSelect={handleConfirmationCandleSelect}
+            selectedCandle={selectedConfirmationCandle}
+          />
+        </Grid>
         {/* Entry heatmap */}
         <Grid item xs={12} md={6}>
           <EntryHeatmap 

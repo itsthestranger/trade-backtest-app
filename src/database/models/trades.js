@@ -1,6 +1,20 @@
 // src/database/models/trades.js
 const db = require('../db');
 
+// Function to calculate result based on direction
+const calculateResultBasedOnDirection = (entry, stop, exit, direction) => {
+  if (!entry || !stop || !exit) return null;
+  const risk = Math.abs(entry - stop);
+  if (risk === 0) return 0;
+  
+  // Direction-based calculation
+  if (direction === 'Long') {
+    return (exit - entry) / risk;
+  } else { // Short
+    return (entry - exit) / risk;
+  }
+};
+
 // Trade model for handling trade data operations
 class TradeModel {
   // Create a new trade
@@ -68,8 +82,12 @@ class TradeModel {
       // Calculate result if exit price is provided
       let result = null;
       if (tradeData.exit) {
-        result = tradeData.entry !== tradeData.stop ? 
-          (tradeData.exit - tradeData.entry) / Math.abs(tradeData.entry - tradeData.stop) : 0;
+        result = calculateResultBasedOnDirection(
+          tradeData.entry,
+          tradeData.stop,
+          tradeData.exit,
+          tradeData.direction
+        );
       }
   
       // Calculate average score if all scores are provided
@@ -430,8 +448,13 @@ async update(id, tradeData) {
           }
           
           let result = null;
-          if (entry && stop && exit && Math.abs(entry - stop) > 0) {
-            result = (exit - entry) / Math.abs(entry - stop);
+          if (exit) {
+            result = calculateResultBasedOnDirection(
+              entry,
+              stop,
+              exit,
+              tradeData.direction || currentTrade.direction
+            );
           }
           
           // Update the database with the calculated values

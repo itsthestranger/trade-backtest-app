@@ -32,6 +32,7 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { useSettings } from '../../contexts/SettingsContext';
+import BacktestDocumentation from './BacktestDocumentation';
 
 // Custom cell renderer for Stopped Out (Yes/No toggle)
 const StoppedOutCell = (props) => {
@@ -84,10 +85,10 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
   const handleDuplicate = async (trade) => {
     // Create a duplicate trade by omitting id and modifying the date
     const { id, ...tradeToDuplicate } = trade;
-
+    
     // Set today's date
     const today = new Date().toISOString().split('T')[0];
-
+    
     // Create new trade object
     const newTrade = {
       ...tradeToDuplicate,
@@ -103,7 +104,7 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
       await onUpdate(id, newTrade);
       setSnackbarMessage('Trade duplicated successfully');
       setSnackbarSeverity('success');
-      setSnackbarOpen(true);
+    setSnackbarOpen(true);
     } catch (error) {
       console.error('Error duplicating trade:', error);
       setSnackbarMessage('Error duplicating trade');
@@ -875,68 +876,11 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
         </DialogTitle>
         <DialogContent>
           {currentTrade && (
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                {currentTrade.instrument_name} {currentTrade.direction} ({currentTrade.date})
-              </Typography>
-              
-              {currentTrade.documentation && currentTrade.documentation.trade_journal && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2">Trade Journal:</Typography>
-                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                    {currentTrade.documentation.trade_journal}
-                  </Typography>
-                </Box>
-              )}
-              
-              {currentTrade.confluences && currentTrade.confluences.length > 0 && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2">Confluences:</Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-                    {currentTrade.confluences.map((confluence) => (
-                      <Tooltip key={confluence.id} title={confluence.name}>
-                        <Box 
-                          component="span" 
-                          sx={{ 
-                            p: 0.5, 
-                            bgcolor: 'primary.light', 
-                            color: 'primary.contrastText',
-                            borderRadius: 1,
-                            fontSize: '0.8rem'
-                          }}
-                        >
-                          {confluence.name}
-                        </Box>
-                      </Tooltip>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-              
-              {currentTrade.documentation && currentTrade.documentation.body_mind_state && (
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle2">Body & Mind State:</Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-                    {currentTrade.documentation.body_mind_state.split(',').map((state) => (
-                      <Tooltip key={state} title={state}>
-                        <Box 
-                          component="span" 
-                          sx={{ 
-                            p: 0.5, 
-                            bgcolor: 'secondary.light', 
-                            color: 'secondary.contrastText',
-                            borderRadius: 1,
-                            fontSize: '0.8rem'
-                          }}
-                        >
-                          {state}
-                        </Box>
-                      </Tooltip>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-            </Box>
+            <BacktestDocumentation
+              trade={currentTrade}
+              onUpdate={onUpdate}
+              onClose={() => setDocumentationOpen(false)}
+            />
           )}
         </DialogContent>
         <DialogActions>

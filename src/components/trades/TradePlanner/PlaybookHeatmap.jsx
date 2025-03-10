@@ -35,6 +35,43 @@ const PlaybookHeatmap = ({ playbookData, backtestData, isLoading }) => {
   const calculateStats = () => {
     if (!backtestData || backtestData.length === 0) {
       return {
+        backtestStats: {
+          totalTrades: 0,
+          totalR: 0,
+          winRate: 0,
+          winners: 0,
+          expenses: 0
+        },
+        liveTradeStats: {
+          totalTrades: 0,
+          totalR: 0,
+          winRate: 0,
+          winners: 0,
+          expenses: 0
+        }
+      };
+    }
+    
+    // Separate backtest and live trades
+    const backtestTrades = backtestData.filter(trade => trade.backtest_id !== null);
+    const liveTrades = backtestData.filter(trade => trade.backtest_id === null);
+    
+    // Calculate backtest stats
+    const backtestStats = calculateStatsForTrades(backtestTrades);
+    
+    // Calculate live trade stats
+    const liveTradeStats = calculateStatsForTrades(liveTrades);
+    
+    return {
+      backtestStats,
+      liveTradeStats
+    };
+  };
+
+  // Helper function to calculate stats for a set of trades
+  const calculateStatsForTrades = (trades) => {
+    if (!trades || trades.length === 0) {
+      return {
         totalTrades: 0,
         totalR: 0,
         winRate: 0,
@@ -43,11 +80,17 @@ const PlaybookHeatmap = ({ playbookData, backtestData, isLoading }) => {
       };
     }
     
-    const totalTrades = backtestData.length;
-    const totalR = backtestData.reduce((sum, trade) => sum + (trade.result || 0), 0);
-    const winners = backtestData.filter(trade => trade.status === 'Winner').length;
-    const expenses = backtestData.filter(trade => trade.status === 'Expense').length;
-    const winRate = totalTrades > 0 ? (winners / totalTrades) * 100 : 0;
+    const totalTrades = trades.length;
+    const totalR = trades.reduce((sum, trade) => sum + (trade.result || 0), 0);
+    const winners = trades.filter(trade => trade.status === 'Winner').length;
+    const expenses = trades.filter(trade => trade.status === 'Expense').length;
+    
+    // Exclude break even trades from winrate calculation
+    const tradesForWinRate = trades.filter(
+      trade => trade.status === 'Winner' || trade.status === 'Expense'
+    ).length;
+    
+    const winRate = tradesForWinRate > 0 ? (winners / tradesForWinRate) * 100 : 0;
     
     return {
       totalTrades,
@@ -57,7 +100,7 @@ const PlaybookHeatmap = ({ playbookData, backtestData, isLoading }) => {
       expenses
     };
   };
-  
+
   const stats = calculateStats();
   
   return (
@@ -72,36 +115,70 @@ const PlaybookHeatmap = ({ playbookData, backtestData, isLoading }) => {
         </Alert>
       )}
       
-      {/* Backtest Statistics */}
-      {backtestData && backtestData.length > 0 && (
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle1">
-            Backtest Statistics
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6} md={3}>
-              <Typography variant="body2">Total Trades:</Typography>
-              <Typography variant="h6">{stats.totalTrades}</Typography>
+      {/* Stats Container */}
+      <Box sx={{ mb: 2 }}>
+        {/* Backtest Statistics */}
+        {stats.backtestStats.totalTrades > 0 && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle1">
+              Backtest Statistics
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Total Trades:</Typography>
+                <Typography variant="h6">{stats.backtestStats.totalTrades}</Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Total R:</Typography>
+                <Typography variant="h6" color={stats.backtestStats.totalR >= 0 ? 'success.main' : 'error.main'}>
+                  {stats.backtestStats.totalR.toFixed(2)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Win Rate:</Typography>
+                <Typography variant="h6">{stats.backtestStats.winRate.toFixed(1)}%</Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Winners/Expenses:</Typography>
+                <Typography variant="h6">
+                  {stats.backtestStats.winners}/{stats.backtestStats.expenses}
+                </Typography>
+              </Grid>
             </Grid>
-            <Grid item xs={6} md={3}>
-              <Typography variant="body2">Total R:</Typography>
-              <Typography variant="h6" color={stats.totalR >= 0 ? 'success.main' : 'error.main'}>
-                {stats.totalR.toFixed(2)}
-              </Typography>
+          </Box>
+        )}
+        
+        {/* Live Trade Statistics */}
+        {stats.liveTradeStats.totalTrades > 0 && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle1">
+              Live Trade Statistics
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Total Trades:</Typography>
+                <Typography variant="h6">{stats.liveTradeStats.totalTrades}</Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Total R:</Typography>
+                <Typography variant="h6" color={stats.liveTradeStats.totalR >= 0 ? 'success.main' : 'error.main'}>
+                  {stats.liveTradeStats.totalR.toFixed(2)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Win Rate:</Typography>
+                <Typography variant="h6">{stats.liveTradeStats.winRate.toFixed(1)}%</Typography>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <Typography variant="body2">Winners/Expenses:</Typography>
+                <Typography variant="h6">
+                  {stats.liveTradeStats.winners}/{stats.liveTradeStats.expenses}
+                </Typography>
+              </Grid>
             </Grid>
-            <Grid item xs={6} md={3}>
-              <Typography variant="body2">Win Rate:</Typography>
-              <Typography variant="h6">{stats.winRate.toFixed(1)}%</Typography>
-            </Grid>
-            <Grid item xs={6} md={3}>
-              <Typography variant="body2">Winners/Expenses:</Typography>
-              <Typography variant="h6">
-                {stats.winners}/{stats.expenses}
-              </Typography>
-            </Grid>
-          </Grid>
-        </Box>
-      )}
+          </Box>
+        )}
+      </Box>
       
       <Divider sx={{ my: 2 }} />
       

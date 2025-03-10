@@ -86,25 +86,25 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
 
   // Handle duplicate trade
   const handleDuplicate = (trade) => {
-    // Create a duplicate trade by omitting id and modifying the date
-    const { id, ...tradeToDuplicate } = trade;
-    
-    // Set today's date
-    const today = new Date().toISOString().split('T')[0];
-    
+      // Create a duplicate trade by omitting id and modifying the date
+      const { id, ...tradeToDuplicate } = trade;
+      
+      // Set today's date
+      const today = new Date().toISOString().split('T')[0];
+      
     // Create new trade object
-    const newTrade = {
-      ...tradeToDuplicate,
-      date: today,
-      // Reset specific fields that should not be duplicated
-      exit: null,
-      result: null,
-      stopped_out: false,
+      const newTrade = {
+        ...tradeToDuplicate,
+        date: today,
+        // Reset specific fields that should not be duplicated
+        exit: null,
+        result: null,
+        stopped_out: false,
       // Keep the same preparation, entry, etc. scores
-    };
-    
+      };
+      
     // Call parent's onSelect with the new trade data
-    onSelect(newTrade);
+      onSelect(newTrade);
   };
 
   // Handle delete confirmation
