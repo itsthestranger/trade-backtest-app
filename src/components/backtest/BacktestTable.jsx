@@ -33,6 +33,28 @@ import {
 } from '@mui/icons-material';
 import { useSettings } from '../../contexts/SettingsContext';
 
+// Custom cell renderer for Stopped Out (Yes/No toggle)
+const StoppedOutCell = (props) => {
+  const { id, value, field, api } = props;
+  const isChecked = value === 'Yes';
+  
+  return (
+    <FormControlLabel
+      control={
+        <Switch
+          checked={isChecked}
+          onChange={(event) => {
+            api.setEditCellValue({ id, field, value: event.target.checked ? 'Yes' : 'No' });
+          }}
+          size="small"
+        />
+      }
+      label={value}
+      sx={{ ml: 0 }}
+    />
+  );
+};
+
 const BacktestTable = ({ trades, onUpdate, onDelete }) => {
   const { instruments, entryMethods, isLoading } = useSettings();
 
@@ -150,8 +172,28 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
         formattedValue = value.toISOString().split('T')[0];
       }
       
+      // Handle special fields that require different IDs
+      let updateField = field;
+      if (field === 'instrument') {
+        updateField = 'instrument_id';
+        // Find the instrument ID by name
+        const instrument = instruments.find(i => i.name === value);
+        if (instrument) {
+          formattedValue = instrument.id;
+        }
+      } else if (field === 'entry_method') {
+        updateField = 'entry_method_id';
+        // Find the entry method ID by name
+        const entryMethod = entryMethods.find(m => m.name === value);
+        if (entryMethod) {
+          formattedValue = entryMethod.id;
+        }
+      } else if (field === 'stopped_out') {
+        formattedValue = value === 'Yes';
+      }
+      
       // Create an update object with just the changed field
-      const updateData = { [field]: formattedValue };
+      const updateData = { [updateField]: formattedValue };
       
       // Send the update to the backend
       await onUpdate(id, updateData);
@@ -310,25 +352,87 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
     actionsColumn,
     { field: 'day', headerName: 'Day', width: 60 },
     { 
-    field: 'date', 
-    headerName: 'Date', 
-    width: 110, 
-    editable: true, 
-    type: 'date',
-    valueGetter: (params) => {
-      // Convert string date to Date object
-      return params.value ? new Date(params.value) : null;
-    }
-  },
-    { field: 'confirmation_time', headerName: 'Conf Time', width: 90, editable: true },
-    { field: 'entry_time', headerName: 'Entry Time', width: 90, editable: true },
-    { field: 'instrument', headerName: 'Instrument', width: 100 },
-    { field: 'confirmation_type', headerName: 'Conf Type', width: 120 },
-    { field: 'direction', headerName: 'Direction', width: 80 },
-    { field: 'session', headerName: 'Session', width: 80 },
-    { field: 'entry_method', headerName: 'Entry Method', width: 150 },
-    { field: 'stopped_out', headerName: 'Stopped Out', width: 100 },
-    { field: 'status', headerName: 'Status', width: 80 },
+      field: 'date', 
+      headerName: 'Date', 
+      width: 110, 
+      editable: true, 
+      type: 'date',
+      valueGetter: (params) => {
+        // Convert string date to Date object
+        return params.value ? new Date(params.value) : null;
+      }
+    },
+    { 
+      field: 'confirmation_time', 
+      headerName: 'Conf Time', 
+      width: 90, 
+      editable: true 
+    },
+    { 
+      field: 'entry_time', 
+      headerName: 'Entry Time', 
+      width: 90, 
+      editable: true 
+    },
+    { 
+      field: 'instrument', 
+      headerName: 'Instrument', 
+      width: 100, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: instruments.map(i => i.name)
+    },
+    { 
+      field: 'confirmation_type', 
+      headerName: 'Conf Type', 
+      width: 120, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Wick Confirmation', 'Full Confirmation', 'Early Indication', 'No Confirmation']
+    },
+    { 
+      field: 'direction', 
+      headerName: 'Direction', 
+      width: 80, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Long', 'Short']
+    },
+    { 
+      field: 'session', 
+      headerName: 'Session', 
+      width: 80, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['ODR', 'RDR']
+    },
+    { 
+      field: 'entry_method', 
+      headerName: 'Entry Method', 
+      width: 150, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: entryMethods.map(m => m.name)
+    },
+    { 
+      field: 'stopped_out', 
+      headerName: 'Stopped Out', 
+      width: 100, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Yes', 'No'],
+      renderEditCell: (params) => (
+        <StoppedOutCell {...params} />
+      )
+    },
+    { 
+      field: 'status', 
+      headerName: 'Status', 
+      width: 80, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Winner', 'Expense', 'Break Even', '']
+    },
     { field: 'ret_entry', headerName: 'Ret. Entry', width: 90, type: 'number', editable: true },
     { field: 'sd_exit', headerName: 'SD Exit', width: 90, type: 'number', editable: true },
     { field: 'entry', headerName: 'Entry', width: 90, type: 'number', editable: true },
@@ -573,6 +677,8 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
                   >
                     <MenuItem value="Winner">Winner</MenuItem>
                     <MenuItem value="Expense">Expense</MenuItem>
+                    <MenuItem value="Break Even">Break Even</MenuItem>
+                    <MenuItem value="">None</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>

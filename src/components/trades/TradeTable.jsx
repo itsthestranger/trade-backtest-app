@@ -25,8 +25,7 @@ import {
 import { 
   DataGrid, 
   GridActionsCellItem,
-  GridEditSingleSelectCell,
-  GridFilterAltIcon
+  GridEditSingleSelectCell
 } from '@mui/x-data-grid';
 import {
   Delete as DeleteIcon,
@@ -37,28 +36,6 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { useSettings } from '../../contexts/SettingsContext';
-
-// Custom cell renderer for dropdown selections
-const SelectEditInputCell = (props) => {
-  const { id, value, field, options } = props;
-  return (
-    <Select
-      value={value}
-      onChange={(event) => {
-        props.api.setEditCellValue({ id, field, value: event.target.value });
-      }}
-      fullWidth
-      variant="standard"
-      sx={{ height: 40 }}
-    >
-      {options.map((option) => (
-        <MenuItem key={option.value} value={option.value}>
-          {option.label}
-        </MenuItem>
-      ))}
-    </Select>
-  );
-};
 
 // Custom cell renderer for Stopped Out (Yes/No toggle)
 const StoppedOutCell = (props) => {
@@ -452,7 +429,7 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
       width: 100, 
       editable: true,
       type: 'singleSelect',
-      valueOptions: ['Winner', 'Expense', 'Break Even'],
+      valueOptions: ['Winner', 'Expense', 'Break Even', ''],
     },
     { field: 'ret_entry', headerName: 'Ret. Entry', width: 90, type: 'number', editable: true },
     { field: 'sd_exit', headerName: 'SD Exit', width: 90, type: 'number', editable: true },
@@ -707,6 +684,7 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
                     <MenuItem value="Winner">Winner</MenuItem>
                     <MenuItem value="Expense">Expense</MenuItem>
                     <MenuItem value="Break Even">Break Even</MenuItem>
+                    <MenuItem value="">None</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>

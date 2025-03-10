@@ -13,7 +13,7 @@ class TradeModel {
         entry_time: '00:00', // Default time
         direction: 'Long', // Default direction
         session: 'ODR', // Default session
-        status: 'Winner', // Default status
+        status: '', // Default status is now empty
         stopped_out: 0, // Default stopped_out (false)
         planned_executed: 'Planned', // Default execution status
       };
@@ -765,11 +765,18 @@ async update(id, tradeData) {
       const expenses = allTrades.filter(trade => trade.status === 'Expense').length;
       const recentExpenses = recentTrades.filter(trade => trade.status === 'Expense').length;
       
+      // Calculate breakEvens using the status field or the result value
       const breakEvens = allTrades.filter(
-        trade => trade.result !== null && Math.abs(trade.result) < 0.1
+        trade => trade.status === 'Break Even' || 
+          (trade.status !== 'Winner' && trade.status !== 'Expense' && 
+          trade.result !== null && Math.abs(trade.result) < 0.1)
       ).length;
+      
+      // Recent break evens with similar logic
       const recentBreakEvens = recentTrades.filter(
-        trade => trade.result !== null && Math.abs(trade.result) < 0.1
+        trade => trade.status === 'Break Even' || 
+          (trade.status !== 'Winner' && trade.status !== 'Expense' && 
+          trade.result !== null && Math.abs(trade.result) < 0.1)
       ).length;
       
       const chickenOuts = allTrades.filter(
