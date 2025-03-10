@@ -69,9 +69,11 @@ CREATE TABLE IF NOT EXISTS trades (
     average REAL,
     planned_executed TEXT NOT NULL DEFAULT 'Planned',
     account_id INTEGER,
+    backtest_id INTEGER,
     FOREIGN KEY (instrument_id) REFERENCES instruments (id),
     FOREIGN KEY (entry_method_id) REFERENCES entry_methods (id),
-    FOREIGN KEY (account_id) REFERENCES accounts (id)
+    FOREIGN KEY (account_id) REFERENCES accounts (id),
+    FOREIGN KEY (backtest_id) REFERENCES backtests (id)
 );
 
 -- Trade Documentation Table

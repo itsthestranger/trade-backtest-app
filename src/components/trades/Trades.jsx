@@ -194,8 +194,10 @@ const Trades = () => {
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                sx={{ mr: 2 }}
-                onClick={() => handleTradeSelect(null)}
+                onClick={() => handleTradeCreate({
+                  date: new Date().toISOString().split('T')[0],
+                  backtest_id: null
+                })}
               >
                 Add Trade
               </Button>

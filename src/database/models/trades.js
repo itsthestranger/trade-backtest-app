@@ -94,40 +94,41 @@ class TradeModel {
           direction, session, entry_method_id, stopped_out, status, ret_entry,
           sd_exit, entry, stop, target, exit, stop_ticks, pot_result, result,
           preparation, entry_score, stop_loss, target_score, management, rules,
-          average, planned_executed, account_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          average, planned_executed, account_id, backtest_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-  
+
       const params = [
-        tradeData.date,
-        tradeData.day,
-        tradeData.confirmation_time,
-        tradeData.entry_time,
-        tradeData.instrument_id,
-        tradeData.confirmation_type || 'No Confirmation',
-        tradeData.direction,
-        tradeData.session,
-        tradeData.entry_method_id,
-        tradeData.stopped_out ? 1 : 0,
-        tradeData.status,
-        tradeData.ret_entry || null,
-        tradeData.sd_exit || null,
-        tradeData.entry,
-        tradeData.stop,
-        tradeData.target,
-        tradeData.exit || null,
-        stopTicks,
-        potResult,
-        result,
-        tradeData.preparation || null,
-        tradeData.entry_score || null,
-        tradeData.stop_loss || null,
-        tradeData.target_score || null,
-        tradeData.management || null,
-        tradeData.rules || null,
-        average,
-        tradeData.planned_executed,
-        tradeData.account_id || null
+      tradeData.date,
+      tradeData.day,
+      tradeData.confirmation_time,
+      tradeData.entry_time,
+      tradeData.instrument_id,
+      tradeData.confirmation_type || 'No Confirmation',
+      tradeData.direction,
+      tradeData.session,
+      tradeData.entry_method_id,
+      tradeData.stopped_out ? 1 : 0,
+      tradeData.status,
+      tradeData.ret_entry || null,
+      tradeData.sd_exit || null,
+      tradeData.entry,
+      tradeData.stop,
+      tradeData.target,
+      tradeData.exit || null,
+      stopTicks,
+      potResult,
+      result,
+      tradeData.preparation || null,
+      tradeData.entry_score || null,
+      tradeData.stop_loss || null,
+      tradeData.target_score || null,
+      tradeData.management || null,
+      tradeData.rules || null,
+      average,
+      tradeData.planned_executed,
+      tradeData.account_id || null,
+      tradeData.backtest_id || null  // Added this line
       ];
   
       const { id } = await db.run(sql, params);

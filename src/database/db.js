@@ -92,6 +92,20 @@ class Database {
     } catch (err) {
       console.error('Error executing transaction', err);
     }
+    // Then, check if we need to add the backtest_id column
+    try {
+      // Check if backtest_id column exists
+      const tableInfo = await this.all("PRAGMA table_info(trades)");
+      const hasBacktestId = tableInfo.some(column => column.name === 'backtest_id');
+      
+      if (!hasBacktestId) {
+          console.log('Adding backtest_id column to trades table...');
+          await this.run('ALTER TABLE trades ADD COLUMN backtest_id INTEGER REFERENCES backtests(id)');
+          console.log('Migration complete');
+      }
+    } catch (err) {
+        console.error('Error during migration:', err);
+    }
   }
 
   // Backup the database to a specified path

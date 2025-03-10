@@ -18,9 +18,11 @@ import {
   FormControlLabel,
   Switch,
   Grid,
-  Typography
+  Typography,
+  Snackbar,
+  Alert
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
+import { DataGrid, GridActionsCellItem } from '@mui/x-data-grid';
 import {
   Delete as DeleteIcon,
   ContentCopy as DuplicateIcon,
@@ -40,6 +42,9 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState(null);
   const [documentationOpen, setDocumentationOpen] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
   // Handle edit
   const handleEdit = (trade) => {
@@ -74,8 +79,14 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
 
     try {
       await onUpdate(id, newTrade);
+      setSnackbarMessage('Trade duplicated successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
     } catch (error) {
       console.error('Error duplicating trade:', error);
+      setSnackbarMessage('Error duplicating trade');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     }
   };
 
@@ -94,8 +105,17 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
   // Handle delete confirm
   const handleDeleteConfirmed = async () => {
     if (rowIdToDelete) {
-      await onDelete(rowIdToDelete);
-      setRowIdToDelete(null);
+      try {
+        await onDelete(rowIdToDelete);
+        setRowIdToDelete(null);
+        setSnackbarMessage('Trade deleted successfully');
+        setSnackbarSeverity('success');
+        setSnackbarOpen(true);
+      } catch (error) {
+        setSnackbarMessage('Error deleting trade');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      }
     }
     setConfirmDeleteOpen(false);
   };
@@ -111,6 +131,32 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
       ...currentTrade,
       [name]: newValue
     });
+  };
+
+  // Handle cell edit
+  const handleCellEditCommit = async (params) => {
+    try {
+      const { id, field, value } = params;
+      
+      // Find the original trade
+      const trade = trades.find(t => t.id === id);
+      if (!trade) return;
+      
+      // Create an update object with just the changed field
+      const updateData = { [field]: value };
+      
+      // Send the update to the backend
+      await onUpdate(id, updateData);
+      
+      setSnackbarMessage('Trade updated successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+    } catch (error) {
+      console.error('Error updating cell:', error);
+      setSnackbarMessage('Error updating trade');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
   };
 
   // Handle save
@@ -151,9 +197,46 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
       
       await onUpdate(currentTrade.id, updateData);
       setEditDialogOpen(false);
+      setSnackbarMessage('Trade updated successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
     } catch (error) {
       console.error('Error saving trade:', error);
+      setSnackbarMessage('Error updating trade');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     }
+  };
+
+  // Define actions column
+  const actionsColumn = {
+    field: 'actions',
+    headerName: 'Actions',
+    width: 150,
+    type: 'actions',
+    getActions: (params) => [
+      <GridActionsCellItem
+        icon={<DocumentIcon />}
+        label="Documentation"
+        onClick={() => handleViewDocumentation(params.row.raw)}
+      />,
+      <GridActionsCellItem
+        icon={<EditIcon />}
+        label="Edit"
+        onClick={() => handleEdit(params.row.raw)}
+      />,
+      <GridActionsCellItem
+        icon={<DuplicateIcon />}
+        label="Duplicate" 
+        onClick={() => handleDuplicate(params.row.raw)}
+      />,
+      <GridActionsCellItem
+        icon={<DeleteIcon />}
+        label="Delete"
+        onClick={() => handleDeleteConfirm(params.row.id)}
+        color="error"
+      />
+    ]
   };
 
   // Convert trades to rows
@@ -192,12 +275,13 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
     raw: trade,
   }));
 
-  // Define columns
+  // Define columns - put actions first
   const columns = [
+    actionsColumn,
     { field: 'day', headerName: 'Day', width: 60 },
-    { field: 'date', headerName: 'Date', width: 110 },
-    { field: 'confirmation_time', headerName: 'Conf Time', width: 90 },
-    { field: 'entry_time', headerName: 'Entry Time', width: 90 },
+    { field: 'date', headerName: 'Date', width: 110, editable: true, type: 'date' },
+    { field: 'confirmation_time', headerName: 'Conf Time', width: 90, editable: true },
+    { field: 'entry_time', headerName: 'Entry Time', width: 90, editable: true },
     { field: 'instrument', headerName: 'Instrument', width: 100 },
     { field: 'confirmation_type', headerName: 'Conf Type', width: 120 },
     { field: 'direction', headerName: 'Direction', width: 80 },
@@ -205,65 +289,22 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
     { field: 'entry_method', headerName: 'Entry Method', width: 150 },
     { field: 'stopped_out', headerName: 'Stopped Out', width: 100 },
     { field: 'status', headerName: 'Status', width: 80 },
-    { field: 'ret_entry', headerName: 'Ret. Entry', width: 90, type: 'number' },
-    { field: 'sd_exit', headerName: 'SD Exit', width: 90, type: 'number' },
-    { field: 'entry', headerName: 'Entry', width: 90, type: 'number' },
-    { field: 'stop', headerName: 'Stop', width: 90, type: 'number' },
-    { field: 'target', headerName: 'Target', width: 90, type: 'number' },
-    { field: 'exit', headerName: 'Exit', width: 90, type: 'number' },
+    { field: 'ret_entry', headerName: 'Ret. Entry', width: 90, type: 'number', editable: true },
+    { field: 'sd_exit', headerName: 'SD Exit', width: 90, type: 'number', editable: true },
+    { field: 'entry', headerName: 'Entry', width: 90, type: 'number', editable: true },
+    { field: 'stop', headerName: 'Stop', width: 90, type: 'number', editable: true },
+    { field: 'target', headerName: 'Target', width: 90, type: 'number', editable: true },
+    { field: 'exit', headerName: 'Exit', width: 90, type: 'number', editable: true },
     { field: 'stop_ticks', headerName: 'Stop Ticks', width: 100, type: 'number' },
     { field: 'pot_result', headerName: 'Pot. Result', width: 100, type: 'number' },
     { field: 'result', headerName: 'Result', width: 90, type: 'number' },
-    { field: 'preparation', headerName: 'Preparation', width: 100, type: 'number' },
-    { field: 'entry_score', headerName: 'Entry', width: 70, type: 'number' },
-    { field: 'stop_loss', headerName: 'Stop Loss', width: 90, type: 'number' },
-    { field: 'target_score', headerName: 'Target', width: 70, type: 'number' },
-    { field: 'management', headerName: 'Management', width: 100, type: 'number' },
-    { field: 'rules', headerName: 'Rules', width: 70, type: 'number' },
-    { field: 'average', headerName: 'Average', width: 90, type: 'number' },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 150,
-      sortable: false,
-      renderCell: (params) => (
-        <Box>
-          <Tooltip title="Documentation">
-            <IconButton
-              size="small"
-              onClick={() => handleViewDocumentation(params.row.raw)}
-            >
-              <DocumentIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Edit">
-            <IconButton
-              size="small"
-              onClick={() => handleEdit(params.row.raw)}
-            >
-              <EditIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Duplicate">
-            <IconButton
-              size="small"
-              onClick={() => handleDuplicate(params.row.raw)}
-            >
-              <DuplicateIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              onClick={() => handleDeleteConfirm(params.row.id)}
-              color="error"
-            >
-              <DeleteIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      ),
-    },
+    { field: 'preparation', headerName: 'Preparation', width: 100, type: 'number', editable: true },
+    { field: 'entry_score', headerName: 'Entry', width: 70, type: 'number', editable: true },
+    { field: 'stop_loss', headerName: 'Stop Loss', width: 90, type: 'number', editable: true },
+    { field: 'target_score', headerName: 'Target', width: 70, type: 'number', editable: true },
+    { field: 'management', headerName: 'Management', width: 100, type: 'number', editable: true },
+    { field: 'rules', headerName: 'Rules', width: 70, type: 'number', editable: true },
+    { field: 'average', headerName: 'Average', width: 90, type: 'number' }
   ];
 
   // Cell styling based on values
@@ -278,6 +319,11 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
     }
     return '';
   };
+  
+  // Handle snackbar close
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
 
   return (
     <Box sx={{ height: 650, width: '100%' }}>
@@ -291,6 +337,9 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
         checkboxSelection={false}
         disableRowSelectionOnClick
         getCellClassName={getCellClassName}
+        editMode="cell"
+        processRowUpdate={(newRow, oldRow) => newRow}
+        onCellEditStop={handleCellEditCommit}
         sx={{
           '& .positive-result': { color: 'green' },
           '& .negative-result': { color: 'red' },
@@ -740,6 +789,18 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
           <Button onClick={() => setDocumentationOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Notification snackbar */}
+      <Snackbar 
+        open={snackbarOpen} 
+        autoHideDuration={3000} 
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
