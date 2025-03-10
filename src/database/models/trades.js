@@ -6,21 +6,67 @@ class TradeModel {
   // Create a new trade
   async create(tradeData) {
     try {
-      // Calculate day from date
-      const date = new Date(tradeData.date);
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const day = days[date.getDay()];
-      
+      // Default values for required fields
+      const defaults = {
+        date: new Date().toISOString().split('T')[0],
+        confirmation_time: '00:00', // Default time
+        entry_time: '00:00', // Default time
+        direction: 'Long', // Default direction
+        session: 'ODR', // Default session
+        status: 'Winner', // Default status
+        stopped_out: 0, // Default stopped_out (false)
+        planned_executed: 'Planned', // Default execution status
+      };
+  
+      // Handle missing instrument_id
+      if (!tradeData.instrument_id) {
+        const defaultInstrument = await db.get('SELECT id FROM instruments LIMIT 1');
+        if (!defaultInstrument) {
+          throw new Error('No instruments found. Please add an instrument first.');
+        }
+        tradeData.instrument_id = defaultInstrument.id;
+      }
+  
+      // Handle missing entry_method_id
+      if (!tradeData.entry_method_id) {
+        const defaultEntryMethod = await db.get('SELECT id FROM entry_methods LIMIT 1');
+        if (!defaultEntryMethod) {
+          throw new Error('No entry methods found. Please add an entry method first.');
+        }
+        tradeData.entry_method_id = defaultEntryMethod.id;
+      }
+  
+      // Apply defaults for any missing required fields
+      tradeData = {
+        ...defaults,
+        ...tradeData
+      };
+  
+      // Calculate day from date if not provided
+      if (!tradeData.day) {
+        const date = new Date(tradeData.date);
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        tradeData.day = days[date.getDay()];
+      }
+  
+      // Handle price fields
+      // Set default values for entry, stop, target if not provided
+      if (!tradeData.entry) tradeData.entry = 0;
+      if (!tradeData.stop) tradeData.stop = 0;
+      if (!tradeData.target) tradeData.target = 0;
+  
       // Calculate stop_ticks, pot_result, and average
       const stopTicks = Math.abs(tradeData.entry - tradeData.stop) / (await this.getTickValue(tradeData.instrument_id));
-      const potResult = Math.abs(tradeData.target - tradeData.entry) / Math.abs(tradeData.entry - tradeData.stop);
-      
+      const potResult = tradeData.entry !== tradeData.stop ? 
+        Math.abs(tradeData.target - tradeData.entry) / Math.abs(tradeData.entry - tradeData.stop) : 0;
+  
       // Calculate result if exit price is provided
       let result = null;
       if (tradeData.exit) {
-        result = (tradeData.exit - tradeData.entry) / Math.abs(tradeData.entry - tradeData.stop);
+        result = tradeData.entry !== tradeData.stop ? 
+          (tradeData.exit - tradeData.entry) / Math.abs(tradeData.entry - tradeData.stop) : 0;
       }
-      
+  
       // Calculate average score if all scores are provided
       let average = null;
       if (
@@ -40,7 +86,7 @@ class TradeModel {
           tradeData.rules
         ) / 6;
       }
-      
+  
       // Insert the trade
       const sql = `
         INSERT INTO trades (
@@ -51,41 +97,41 @@ class TradeModel {
           average, planned_executed, account_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      
+  
       const params = [
         tradeData.date,
-        day,
+        tradeData.day,
         tradeData.confirmation_time,
         tradeData.entry_time,
         tradeData.instrument_id,
-        tradeData.confirmation_type,
+        tradeData.confirmation_type || 'No Confirmation',
         tradeData.direction,
         tradeData.session,
         tradeData.entry_method_id,
         tradeData.stopped_out ? 1 : 0,
         tradeData.status,
-        tradeData.ret_entry,
-        tradeData.sd_exit,
+        tradeData.ret_entry || null,
+        tradeData.sd_exit || null,
         tradeData.entry,
         tradeData.stop,
         tradeData.target,
-        tradeData.exit,
+        tradeData.exit || null,
         stopTicks,
         potResult,
         result,
-        tradeData.preparation,
-        tradeData.entry_score,
-        tradeData.stop_loss,
-        tradeData.target_score,
-        tradeData.management,
-        tradeData.rules,
+        tradeData.preparation || null,
+        tradeData.entry_score || null,
+        tradeData.stop_loss || null,
+        tradeData.target_score || null,
+        tradeData.management || null,
+        tradeData.rules || null,
         average,
-        tradeData.planned_executed || 'Planned',
-        tradeData.account_id
+        tradeData.planned_executed,
+        tradeData.account_id || null
       ];
-      
+  
       const { id } = await db.run(sql, params);
-      
+  
       // If documentation is provided, save it
       if (tradeData.trade_journal || tradeData.body_mind_state) {
         await this.saveDocumentation(id, {
@@ -93,12 +139,12 @@ class TradeModel {
           body_mind_state: tradeData.body_mind_state
         });
       }
-      
+  
       // If confluences are provided, save them
       if (tradeData.confluences && tradeData.confluences.length > 0) {
         await this.saveConfluences(id, tradeData.confluences);
       }
-      
+  
       return { id, ...tradeData };
     } catch (error) {
       console.error('Error creating trade:', error);
@@ -146,8 +192,8 @@ class TradeModel {
     try {
       let sql = `
         SELECT t.*, i.name as instrument_name, i.color as instrument_color,
-               e.name as entry_method_name, e.color as entry_method_color,
-               a.name as account_name, a.color as account_color
+              e.name as entry_method_name, e.color as entry_method_color,
+              a.name as account_name, a.color as account_color
         FROM trades t
         LEFT JOIN instruments i ON t.instrument_id = i.id
         LEFT JOIN entry_methods e ON t.entry_method_id = e.id
@@ -156,6 +202,16 @@ class TradeModel {
       
       const whereConditions = [];
       const params = [];
+      
+      // Add specific filtering for Trades vs Backtest sections
+      if (filters.backtest_id !== undefined) {
+        // For the Backtest section - only show trades for the specific backtest
+        whereConditions.push('t.backtest_id = ?');
+        params.push(filters.backtest_id);
+      } else if (filters.is_live_trade === true) {
+        // For the Trades section - only show trades without a backtest_id
+        whereConditions.push('t.backtest_id IS NULL');
+      }
       
       // Apply filters if provided
       if (filters) {

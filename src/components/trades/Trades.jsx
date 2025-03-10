@@ -39,8 +39,8 @@ const Trades = () => {
         const filtersData = await db.getFilters();
         setFilters(filtersData);
         
-        // Load trades (with no filter for the "All Trades" tab)
-        const tradesData = await db.getTrades();
+        // Load trades - specifically only live trades
+        const tradesData = await db.getTrades({ is_live_trade: true });
         setTrades(tradesData);
         
         setIsLoading(false);
@@ -64,12 +64,19 @@ const Trades = () => {
       let tradesData;
       
       if (newValue === 0) {
-        // "All Trades" tab
-        tradesData = await db.getTrades();
+        // "All Trades" tab - but still only live trades
+        tradesData = await db.getTrades({ is_live_trade: true });
       } else {
         // Filter tab
         const filter = filters[newValue - 1];
-        tradesData = await db.getTrades(filter);
+
+        // Combine the filter with the live trades requirement
+        const combinedFilter = {
+          ...filter,
+          is_live_trade: true
+        };
+
+        tradesData = await db.getTrades(combinedFilter);
       }
       
       setTrades(tradesData);
@@ -89,7 +96,13 @@ const Trades = () => {
   // Handle trade creation
   const handleTradeCreate = async (tradeData) => {
     try {
-      const newTrade = await db.createTrade(tradeData);
+      // Ensure backtest_id is null for live trades
+      const newTradeData = {
+        ...tradeData,
+        backtest_id: null
+      };
+      
+      const newTrade = await db.createTrade(newTradeData);
       setTrades([newTrade, ...trades]);
       return newTrade;
     } catch (error) {

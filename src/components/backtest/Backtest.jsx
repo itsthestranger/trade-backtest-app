@@ -83,11 +83,11 @@ const Backtest = () => {
         if (backtestsData.length > 0 && !selectedBacktest) {
           setSelectedBacktest(backtestsData[0]);
           
-          // Load trades for default backtest
+          // Load trades for default backtest - explicitly include backtest_id
           const tradesData = await db.getTrades({ backtest_id: backtestsData[0].id });
           setTrades(tradesData);
         } else if (selectedBacktest) {
-          // Load trades for selected backtest
+          // Load trades for selected backtest - explicitly include backtest_id
           const tradesData = await db.getTrades({ backtest_id: selectedBacktest.id });
           setTrades(tradesData);
         }
@@ -123,7 +123,7 @@ const Backtest = () => {
         const filter = filters[newValue - 1];
         
         if (selectedBacktest) {
-          // Combine backtest filter with tab filter
+          // Combine the filter with the backtest filter
           const combinedFilter = {
             ...filter,
             backtest_id: selectedBacktest.id
@@ -131,7 +131,7 @@ const Backtest = () => {
           
           tradesData = await db.getTrades(combinedFilter);
         } else {
-          tradesData = await db.getTrades(filter);
+          tradesData = [];
         }
       }
       
