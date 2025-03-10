@@ -170,29 +170,51 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
   // Handle save
   const handleSave = async () => {
     try {
+      // Find the instrument to get tick value
+      const instrument = instruments.find(i => i.id === currentTrade.instrument_id);
+      if (!instrument) {
+        setSnackbarMessage('Error: Could not find instrument');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      const tickValue = instrument.tick_value;
+      
       // Get entry, stop, target values
-      const entry = parseFloat(currentTrade.entry);
-      const stop = parseFloat(currentTrade.stop);
-      const target = parseFloat(currentTrade.target);
+      const entry = parseFloat(currentTrade.entry) || 0;
+      const stop = parseFloat(currentTrade.stop) || 0;
+      const target = parseFloat(currentTrade.target) || 0;
+      const exit = parseFloat(currentTrade.exit) || null;
       
       // Calculate derived values
-      const stopTicks = Math.abs(entry - stop);
-      const potResult = Math.abs(target - entry) / Math.abs(entry - stop);
-      
-      let result = null;
-      if (currentTrade.exit) {
-        result = (currentTrade.exit - entry) / Math.abs(entry - stop);
+      let stopTicks = 0;
+      if (entry && stop && tickValue) {
+        stopTicks = Math.abs(entry - stop) / tickValue;
       }
       
-      // Calculate average score
-      const average = (
-        parseFloat(currentTrade.preparation || 0) +
-        parseFloat(currentTrade.entry_score || 0) +
-        parseFloat(currentTrade.stop_loss || 0) +
-        parseFloat(currentTrade.target_score || 0) +
-        parseFloat(currentTrade.management || 0) +
-        parseFloat(currentTrade.rules || 0)
-      ) / 6;
+      let potResult = 0;
+      if (entry && stop && target && Math.abs(entry - stop) > 0) {
+        potResult = Math.abs(target - entry) / Math.abs(entry - stop);
+      }
+      
+      let result = null;
+      if (entry && stop && exit && Math.abs(entry - stop) > 0) {
+        result = (exit - entry) / Math.abs(entry - stop);
+      }
+      
+      // Calculate average score if all scores are provided
+      const preparation = parseFloat(currentTrade.preparation) || null;
+      const entryScore = parseFloat(currentTrade.entry_score) || null;
+      const stopLoss = parseFloat(currentTrade.stop_loss) || null;
+      const targetScore = parseFloat(currentTrade.target_score) || null;
+      const management = parseFloat(currentTrade.management) || null;
+      const rules = parseFloat(currentTrade.rules) || null;
+      
+      let average = null;
+      if (preparation && entryScore && stopLoss && targetScore && management && rules) {
+        average = (preparation + entryScore + stopLoss + targetScore + management + rules) / 6;
+      }
       
       // Prepare update data
       const updateData = {
@@ -210,7 +232,7 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
       setSnackbarOpen(true);
     } catch (error) {
       console.error('Error saving trade:', error);
-      setSnackbarMessage('Error updating trade');
+      setSnackbarMessage(`Error updating trade: ${error.message}`);
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     }

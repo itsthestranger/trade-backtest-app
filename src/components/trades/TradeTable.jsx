@@ -1,4 +1,4 @@
-// src/components/trades/TradeTable.jsx
+// src/components/trades/TradeTable.jsx - with enhanced inline editing
 import React, { useState } from 'react';
 import { 
   Box, 
@@ -11,27 +11,100 @@ import {
   Button,
   Tooltip,
   Snackbar,
-  Alert
+  Alert,
+  TextField,
+  Grid,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormControlLabel,
+  Switch,
+  Typography
 } from '@mui/material';
-import { DataGrid, GridActionsCellItem } from '@mui/x-data-grid';
+import { 
+  DataGrid, 
+  GridActionsCellItem,
+  GridEditSingleSelectCell,
+  GridFilterAltIcon
+} from '@mui/x-data-grid';
 import {
   Delete as DeleteIcon,
   ContentCopy as DuplicateIcon,
   DescriptionOutlined as DocumentIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  Save as SaveIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
+import { useSettings } from '../../contexts/SettingsContext';
+
+// Custom cell renderer for dropdown selections
+const SelectEditInputCell = (props) => {
+  const { id, value, field, options } = props;
+  return (
+    <Select
+      value={value}
+      onChange={(event) => {
+        props.api.setEditCellValue({ id, field, value: event.target.value });
+      }}
+      fullWidth
+      variant="standard"
+      sx={{ height: 40 }}
+    >
+      {options.map((option) => (
+        <MenuItem key={option.value} value={option.value}>
+          {option.label}
+        </MenuItem>
+      ))}
+    </Select>
+  );
+};
+
+// Custom cell renderer for Stopped Out (Yes/No toggle)
+const StoppedOutCell = (props) => {
+  const { id, value, field, api } = props;
+  const isChecked = value === 'Yes';
+  
+  return (
+    <FormControlLabel
+      control={
+        <Switch
+          checked={isChecked}
+          onChange={(event) => {
+            api.setEditCellValue({ id, field, value: event.target.checked ? 'Yes' : 'No' });
+          }}
+          size="small"
+        />
+      }
+      label={value}
+      sx={{ ml: 0 }}
+    />
+  );
+};
 
 const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
+  const { instruments, entryMethods, isLoading } = useSettings();
+
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 50 });
   const [rowIdToDelete, setRowIdToDelete] = useState(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+  
+  // New state for edit dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [currentTrade, setCurrentTrade] = useState(null);
 
   // Handle view documentation
   const handleViewDocumentation = (trade) => {
     onSelect(trade);
+  };
+
+  // Handle edit - opens dialog instead of calling onSelect
+  const handleEdit = (trade) => {
+    setCurrentTrade(trade);
+    setEditDialogOpen(true);
   };
 
   // Handle duplicate trade
@@ -104,8 +177,28 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
         formattedValue = value.toISOString().split('T')[0];
       }
       
+      // Handle special fields that require different IDs
+      let updateField = field;
+      if (field === 'instrument') {
+        updateField = 'instrument_id';
+        // Find the instrument ID by name
+        const instrument = instruments.find(i => i.name === value);
+        if (instrument) {
+          formattedValue = instrument.id;
+        }
+      } else if (field === 'entry_method') {
+        updateField = 'entry_method_id';
+        // Find the entry method ID by name
+        const entryMethod = entryMethods.find(m => m.name === value);
+        if (entryMethod) {
+          formattedValue = entryMethod.id;
+        }
+      } else if (field === 'stopped_out') {
+        formattedValue = value === 'Yes';
+      }
+      
       // Create an update object with just the changed field
-      const updateData = { [field]: formattedValue };
+      const updateData = { [updateField]: formattedValue };
       
       // Send the update to the backend
       await onUpdate(id, updateData);
@@ -116,6 +209,90 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
     } catch (error) {
       console.error('Error updating cell:', error);
       setSnackbarMessage('Error updating trade');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  };
+
+  // Handle form changes in edit dialog
+  const handleFormChange = (event) => {
+    const { name, value } = event.target;
+    
+    // Special case for switch controls
+    const newValue = event.target.type === 'checkbox' ? event.target.checked : value;
+    
+    setCurrentTrade({
+      ...currentTrade,
+      [name]: newValue
+    });
+  };
+
+  // Handle save from edit dialog
+  const handleSave = async () => {
+    try {
+      // Find the instrument to get tick value
+      const instrument = instruments.find(i => i.id === currentTrade.instrument_id);
+      if (!instrument) {
+        setSnackbarMessage('Error: Could not find instrument');
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      const tickValue = instrument.tick_value;
+      
+      // Get entry, stop, target values
+      const entry = parseFloat(currentTrade.entry) || 0;
+      const stop = parseFloat(currentTrade.stop) || 0;
+      const target = parseFloat(currentTrade.target) || 0;
+      const exit = parseFloat(currentTrade.exit) || null;
+      
+      // Calculate derived values
+      let stopTicks = 0;
+      if (entry && stop && tickValue) {
+        stopTicks = Math.abs(entry - stop) / tickValue;
+      }
+      
+      let potResult = 0;
+      if (entry && stop && target && Math.abs(entry - stop) > 0) {
+        potResult = Math.abs(target - entry) / Math.abs(entry - stop);
+      }
+      
+      let result = null;
+      if (entry && stop && exit && Math.abs(entry - stop) > 0) {
+        result = (exit - entry) / Math.abs(entry - stop);
+      }
+      
+      // Calculate average score if all scores are provided
+      const preparation = parseFloat(currentTrade.preparation) || null;
+      const entryScore = parseFloat(currentTrade.entry_score) || null;
+      const stopLoss = parseFloat(currentTrade.stop_loss) || null;
+      const targetScore = parseFloat(currentTrade.target_score) || null;
+      const management = parseFloat(currentTrade.management) || null;
+      const rules = parseFloat(currentTrade.rules) || null;
+      
+      let average = null;
+      if (preparation && entryScore && stopLoss && targetScore && management && rules) {
+        average = (preparation + entryScore + stopLoss + targetScore + management + rules) / 6;
+      }
+      
+      // Prepare update data
+      const updateData = {
+        ...currentTrade,
+        stop_ticks: stopTicks,
+        pot_result: potResult,
+        result,
+        average
+      };
+      
+      await onUpdate(currentTrade.id, updateData);
+      setEditDialogOpen(false);
+      setSnackbarMessage('Trade updated successfully');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+    } catch (error) {
+      console.error('Error saving trade:', error);
+      setSnackbarMessage(`Error updating trade: ${error.message}`);
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     }
@@ -136,7 +313,7 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
       <GridActionsCellItem
         icon={<EditIcon />}
         label="Edit"
-        onClick={() => onSelect(params.row.raw)}
+        onClick={() => handleEdit(params.row.raw)}
       />,
       <GridActionsCellItem
         icon={<DuplicateIcon />}
@@ -160,10 +337,12 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
     confirmation_time: trade.confirmation_time,
     entry_time: trade.entry_time,
     instrument: trade.instrument_name,
+    instrument_id: trade.instrument_id,
     confirmation_type: trade.confirmation_type,
     direction: trade.direction,
     session: trade.session,
     entry_method: trade.entry_method_name,
+    entry_method_id: trade.entry_method_id,
     stopped_out: trade.stopped_out ? 'Yes' : 'No',
     status: trade.status,
     ret_entry: trade.ret_entry,
@@ -187,30 +366,94 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
     raw: trade,
   }));
 
-  // Define columns - put actions first
+  // Define columns with enhanced inline editing
   const columns = [
     actionsColumn,
     { field: 'day', headerName: 'Day', width: 60 },
     { 
-    field: 'date', 
-    headerName: 'Date', 
-    width: 110, 
-    editable: true, 
-    type: 'date',
-    valueGetter: (params) => {
-      // Convert string date to Date object
-      return params.value ? new Date(params.value) : null;
-    }
-  },
-    { field: 'confirmation_time', headerName: 'Conf Time', width: 90, editable: true },
-    { field: 'entry_time', headerName: 'Entry Time', width: 90, editable: true },
-    { field: 'instrument', headerName: 'Instrument', width: 100 },
-    { field: 'confirmation_type', headerName: 'Conf Type', width: 120 },
-    { field: 'direction', headerName: 'Direction', width: 80 },
-    { field: 'session', headerName: 'Session', width: 80 },
-    { field: 'entry_method', headerName: 'Entry Method', width: 150 },
-    { field: 'stopped_out', headerName: 'Stopped Out', width: 100 },
-    { field: 'status', headerName: 'Status', width: 80 },
+      field: 'date', 
+      headerName: 'Date', 
+      width: 110, 
+      editable: true, 
+      type: 'date',
+      valueGetter: (params) => {
+        // Convert string date to Date object
+        return params.value ? new Date(params.value) : null;
+      }
+    },
+    { 
+      field: 'confirmation_time', 
+      headerName: 'Conf Time', 
+      width: 100, 
+      editable: true,
+      type: 'string'
+    },
+    { 
+      field: 'entry_time', 
+      headerName: 'Entry Time', 
+      width: 100, 
+      editable: true,
+      type: 'string'
+    },
+    { 
+      field: 'instrument', 
+      headerName: 'Instrument', 
+      width: 130, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: instruments.map(i => i.name),
+    },
+    { 
+      field: 'confirmation_type', 
+      headerName: 'Conf Type', 
+      width: 140, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Wick Confirmation', 'Full Confirmation', 'Early Indication', 'No Confirmation'],
+    },
+    { 
+      field: 'direction', 
+      headerName: 'Direction', 
+      width: 90, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Long', 'Short'],
+    },
+    { 
+      field: 'session', 
+      headerName: 'Session', 
+      width: 90, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['ODR', 'RDR'],
+    },
+    { 
+      field: 'entry_method', 
+      headerName: 'Entry Method', 
+      width: 180, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: entryMethods.map(m => m.name),
+    },
+    { 
+      field: 'stopped_out', 
+      headerName: 'Stopped Out', 
+      width: 120, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Yes', 'No'],
+      renderEditCell: (params) => (
+        <StoppedOutCell {...params} />
+      ),
+    },
+    { 
+      field: 'status', 
+      headerName: 'Status', 
+      width: 100, 
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Winner', 'Expense', 'Break Even'],
+    },
     { field: 'ret_entry', headerName: 'Ret. Entry', width: 90, type: 'number', editable: true },
     { field: 'sd_exit', headerName: 'SD Exit', width: 90, type: 'number', editable: true },
     { field: 'entry', headerName: 'Entry', width: 90, type: 'number', editable: true },
@@ -227,7 +470,14 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
     { field: 'management', headerName: 'Management', width: 100, type: 'number', editable: true },
     { field: 'rules', headerName: 'Rules', width: 70, type: 'number', editable: true },
     { field: 'average', headerName: 'Average', width: 90, type: 'number' },
-    { field: 'planned_executed', headerName: 'Status', width: 90 }
+    { 
+      field: 'planned_executed', 
+      headerName: 'Status', 
+      width: 110,
+      editable: true,
+      type: 'singleSelect',
+      valueOptions: ['Planned', 'Executed']
+    }
   ];
 
   // Cell styling based on values
@@ -289,6 +539,342 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
           <Button onClick={handleDeleteCancel}>Cancel</Button>
           <Button onClick={handleDeleteConfirmed} color="error" autoFocus>
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog
+        open={editDialogOpen}
+        onClose={() => setEditDialogOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>
+          Edit Trade
+          <IconButton
+            aria-label="close"
+            onClick={() => setEditDialogOpen(false)}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {currentTrade && (
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="Date"
+                  name="date"
+                  type="date"
+                  value={currentTrade.date}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="Confirmation Time"
+                  name="confirmation_time"
+                  type="time"
+                  value={currentTrade.confirmation_time || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 300 }} // 5 min steps
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="Entry Time"
+                  name="entry_time"
+                  type="time"
+                  value={currentTrade.entry_time || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 300 }} // 5 min steps
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Instrument</InputLabel>
+                  <Select
+                    name="instrument_id"
+                    value={currentTrade.instrument_id || ''}
+                    onChange={handleFormChange}
+                    label="Instrument"
+                  >
+                    {instruments.map((instrument) => (
+                      <MenuItem key={instrument.id} value={instrument.id}>
+                        {instrument.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Confirmation Type</InputLabel>
+                  <Select
+                    name="confirmation_type"
+                    value={currentTrade.confirmation_type || ''}
+                    onChange={handleFormChange}
+                    label="Confirmation Type"
+                  >
+                    <MenuItem value="Wick Confirmation">Wick Confirmation</MenuItem>
+                    <MenuItem value="Full Confirmation">Full Confirmation</MenuItem>
+                    <MenuItem value="Early Indication">Early Indication</MenuItem>
+                    <MenuItem value="No Confirmation">No Confirmation</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Direction</InputLabel>
+                  <Select
+                    name="direction"
+                    value={currentTrade.direction || ''}
+                    onChange={handleFormChange}
+                    label="Direction"
+                  >
+                    <MenuItem value="Long">Long</MenuItem>
+                    <MenuItem value="Short">Short</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Session</InputLabel>
+                  <Select
+                    name="session"
+                    value={currentTrade.session || ''}
+                    onChange={handleFormChange}
+                    label="Session"
+                  >
+                    <MenuItem value="ODR">ODR</MenuItem>
+                    <MenuItem value="RDR">RDR</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Entry Method</InputLabel>
+                  <Select
+                    name="entry_method_id"
+                    value={currentTrade.entry_method_id || ''}
+                    onChange={handleFormChange}
+                    label="Entry Method"
+                  >
+                    {entryMethods.map((method) => (
+                      <MenuItem key={method.id} value={method.id}>
+                        {method.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={currentTrade.stopped_out || false}
+                      onChange={handleFormChange}
+                      name="stopped_out"
+                    />
+                  }
+                  label="Stopped Out"
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    name="status"
+                    value={currentTrade.status || ''}
+                    onChange={handleFormChange}
+                    label="Status"
+                  >
+                    <MenuItem value="Winner">Winner</MenuItem>
+                    <MenuItem value="Expense">Expense</MenuItem>
+                    <MenuItem value="Break Even">Break Even</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="Retracement Entry"
+                  name="ret_entry"
+                  type="number"
+                  value={currentTrade.ret_entry || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <TextField
+                  label="SD Exit"
+                  name="sd_exit"
+                  type="number"
+                  value={currentTrade.sd_exit || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={3}>
+                <TextField
+                  label="Entry"
+                  name="entry"
+                  type="number"
+                  value={currentTrade.entry || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={3}>
+                <TextField
+                  label="Stop"
+                  name="stop"
+                  type="number"
+                  value={currentTrade.stop || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={3}>
+                <TextField
+                  label="Target"
+                  name="target"
+                  type="number"
+                  value={currentTrade.target || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={3}>
+                <TextField
+                  label="Exit"
+                  name="exit"
+                  type="number"
+                  value={currentTrade.exit || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              
+              <Grid item xs={12}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Trade Metrics (Score 1-10)
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="Preparation"
+                  name="preparation"
+                  type="number"
+                  value={currentTrade.preparation || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputProps={{ inputProps: { min: 1, max: 10 } }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="Entry"
+                  name="entry_score"
+                  type="number"
+                  value={currentTrade.entry_score || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputProps={{ inputProps: { min: 1, max: 10 } }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="Stop Loss"
+                  name="stop_loss"
+                  type="number"
+                  value={currentTrade.stop_loss || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputProps={{ inputProps: { min: 1, max: 10 } }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="Target"
+                  name="target_score"
+                  type="number"
+                  value={currentTrade.target_score || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputProps={{ inputProps: { min: 1, max: 10 } }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="Management"
+                  name="management"
+                  type="number"
+                  value={currentTrade.management || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputProps={{ inputProps: { min: 1, max: 10 } }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={2}>
+                <TextField
+                  label="Rules"
+                  name="rules"
+                  type="number"
+                  value={currentTrade.rules || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  InputProps={{ inputProps: { min: 1, max: 10 } }}
+                />
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleSave}
+            color="primary"
+            variant="contained"
+            startIcon={<SaveIcon />}
+          >
+            Save
           </Button>
         </DialogActions>
       </Dialog>
