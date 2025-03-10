@@ -390,134 +390,224 @@ class TradeModel {
         day = days[date.getDay()];
       }
       
-      // Recalculate metrics if needed
-      const entry = tradeData.entry || currentTrade.entry;
-      const stop = tradeData.stop || currentTrade.stop;
-      const target = tradeData.target || currentTrade.target;
-      const exit = tradeData.exit || currentTrade.exit;
+      // Check if this is a single field update or a full trade update
+      const isSingleFieldUpdate = 
+        Object.keys(tradeData).length === 1 && 
+        !['id', 'stop_ticks', 'pot_result', 'result', 'average'].includes(Object.keys(tradeData)[0]);
       
-      const instrumentId = tradeData.instrument_id || currentTrade.instrument_id;
-      const tickValue = await this.getTickValue(instrumentId);
-      
-      const stopTicks = Math.abs(entry - stop) / tickValue;
-      const potResult = Math.abs(target - entry) / Math.abs(entry - stop);
-      
-      let result = null;
-      if (exit) {
-        result = (exit - entry) / Math.abs(entry - stop);
-      }
-      
-      // Calculate average score if all scores are provided
-      const preparation = tradeData.preparation !== undefined ? tradeData.preparation : currentTrade.preparation;
-      const entryScore = tradeData.entry_score !== undefined ? tradeData.entry_score : currentTrade.entry_score;
-      const stopLoss = tradeData.stop_loss !== undefined ? tradeData.stop_loss : currentTrade.stop_loss;
-      const targetScore = tradeData.target_score !== undefined ? tradeData.target_score : currentTrade.target_score;
-      const management = tradeData.management !== undefined ? tradeData.management : currentTrade.management;
-      const rules = tradeData.rules !== undefined ? tradeData.rules : currentTrade.rules;
-      
-      let average = null;
-      if (
-        preparation &&
-        entryScore &&
-        stopLoss &&
-        targetScore &&
-        management &&
-        rules
-      ) {
-        average = (
-          preparation +
-          entryScore +
-          stopLoss +
-          targetScore +
-          management +
+      if (isSingleFieldUpdate) {
+        // For a single field update, we only update that specific field
+        const fieldName = Object.keys(tradeData)[0];
+        const fieldValue = tradeData[fieldName];
+        
+        // Special handling for numeric fields that affect calculations
+        if (['entry', 'stop', 'target', 'exit'].includes(fieldName)) {
+          // Get current values
+          const entry = fieldName === 'entry' ? fieldValue : currentTrade.entry;
+          const stop = fieldName === 'stop' ? fieldValue : currentTrade.stop;
+          const target = fieldName === 'target' ? fieldValue : currentTrade.target;
+          const exit = fieldName === 'exit' ? fieldValue : currentTrade.exit;
+          
+          // Recalculate dependent fields if possible
+          const instrumentId = currentTrade.instrument_id;
+          const tickValue = await this.getTickValue(instrumentId);
+          
+          // Only calculate if we have valid values
+          if (entry && stop && tickValue) {
+            const stopTicks = Math.abs(entry - stop) / tickValue;
+            
+            let potResult = null;
+            if (entry && stop && target && Math.abs(entry - stop) > 0) {
+              potResult = Math.abs(target - entry) / Math.abs(entry - stop);
+            }
+            
+            let result = null;
+            if (entry && stop && exit && Math.abs(entry - stop) > 0) {
+              result = (exit - entry) / Math.abs(entry - stop);
+            }
+            
+            // Update the database with the calculated values
+            const sql = `
+              UPDATE trades 
+              SET ${fieldName} = ?,
+                  day = ?,
+                  stop_ticks = ?,
+                  pot_result = ?,
+                  result = ?
+              WHERE id = ?
+            `;
+            
+            await db.run(sql, [fieldValue, day, stopTicks, potResult, result, id]);
+            
+            // Return updated trade
+            return await this.getById(id);
+          }
+        }
+        
+        // For other fields, just update that specific field
+        const sql = `UPDATE trades SET ${fieldName} = ?, day = ? WHERE id = ?`;
+        await db.run(sql, [fieldValue, day, id]);
+        
+        // If updating any score field, recalculate average
+        if (['preparation', 'entry_score', 'stop_loss', 'target_score', 'management', 'rules'].includes(fieldName)) {
+          // Get all scores
+          const preparation = fieldName === 'preparation' ? fieldValue : currentTrade.preparation;
+          const entryScore = fieldName === 'entry_score' ? fieldValue : currentTrade.entry_score;
+          const stopLoss = fieldName === 'stop_loss' ? fieldValue : currentTrade.stop_loss;
+          const targetScore = fieldName === 'target_score' ? fieldValue : currentTrade.target_score;
+          const management = fieldName === 'management' ? fieldValue : currentTrade.management;
+          const rules = fieldName === 'rules' ? fieldValue : currentTrade.rules;
+          
+          // Calculate average if all scores exist
+          if (preparation && entryScore && stopLoss && targetScore && management && rules) {
+            const average = (
+              parseFloat(preparation) +
+              parseFloat(entryScore) +
+              parseFloat(stopLoss) +
+              parseFloat(targetScore) +
+              parseFloat(management) +
+              parseFloat(rules)
+            ) / 6;
+            
+            await db.run('UPDATE trades SET average = ? WHERE id = ?', [average, id]);
+          }
+        }
+        
+        return await this.getById(id);
+      } else {
+        // For a full trade update, proceed with the existing logic
+        
+        // Recalculate metrics if needed
+        const entry = tradeData.entry || currentTrade.entry;
+        const stop = tradeData.stop || currentTrade.stop;
+        const target = tradeData.target || currentTrade.target;
+        const exit = tradeData.exit || currentTrade.exit;
+        
+        const instrumentId = tradeData.instrument_id || currentTrade.instrument_id;
+        const tickValue = await this.getTickValue(instrumentId);
+        
+        const stopTicks = Math.abs(entry - stop) / tickValue;
+        const potResult = Math.abs(target - entry) / Math.abs(entry - stop);
+        
+        let result = null;
+        if (exit) {
+          result = (exit - entry) / Math.abs(entry - stop);
+        }
+        
+        // Calculate average score if all scores are provided
+        const preparation = tradeData.preparation !== undefined ? tradeData.preparation : currentTrade.preparation;
+        const entryScore = tradeData.entry_score !== undefined ? tradeData.entry_score : currentTrade.entry_score;
+        const stopLoss = tradeData.stop_loss !== undefined ? tradeData.stop_loss : currentTrade.stop_loss;
+        const targetScore = tradeData.target_score !== undefined ? tradeData.target_score : currentTrade.target_score;
+        const management = tradeData.management !== undefined ? tradeData.management : currentTrade.management;
+        const rules = tradeData.rules !== undefined ? tradeData.rules : currentTrade.rules;
+        
+        let average = null;
+        if (
+          preparation &&
+          entryScore &&
+          stopLoss &&
+          targetScore &&
+          management &&
           rules
-        ) / 6;
+        ) {
+          average = (
+            parseFloat(preparation) +
+            parseFloat(entryScore) +
+            parseFloat(stopLoss) +
+            parseFloat(targetScore) +
+            parseFloat(management) +
+            parseFloat(rules)
+          ) / 6;
+        }
+        
+        // Update the trade
+        const sql = `
+          UPDATE trades SET
+            date = COALESCE(?, date),
+            day = ?,
+            confirmation_time = COALESCE(?, confirmation_time),
+            entry_time = COALESCE(?, entry_time),
+            instrument_id = COALESCE(?, instrument_id),
+            confirmation_type = COALESCE(?, confirmation_type),
+            direction = COALESCE(?, direction),
+            session = COALESCE(?, session),
+            entry_method_id = COALESCE(?, entry_method_id),
+            stopped_out = COALESCE(?, stopped_out),
+            status = COALESCE(?, status),
+            ret_entry = COALESCE(?, ret_entry),
+            sd_exit = COALESCE(?, sd_exit),
+            entry = COALESCE(?, entry),
+            stop = COALESCE(?, stop),
+            target = COALESCE(?, target),
+            exit = ?,
+            stop_ticks = ?,
+            pot_result = ?,
+            result = ?,
+            preparation = COALESCE(?, preparation),
+            entry_score = COALESCE(?, entry_score),
+            stop_loss = COALESCE(?, stop_loss),
+            target_score = COALESCE(?, target_score),
+            management = COALESCE(?, management),
+            rules = COALESCE(?, rules),
+            average = ?,
+            planned_executed = COALESCE(?, planned_executed),
+            account_id = COALESCE(?, account_id),
+            backtest_id = COALESCE(?, backtest_id)
+          WHERE id = ?
+        `;
+        
+        const params = [
+          tradeData.date,
+          day,
+          tradeData.confirmation_time,
+          tradeData.entry_time,
+          tradeData.instrument_id,
+          tradeData.confirmation_type,
+          tradeData.direction,
+          tradeData.session,
+          tradeData.entry_method_id,
+          tradeData.stopped_out !== undefined ? (tradeData.stopped_out ? 1 : 0) : currentTrade.stopped_out,
+          tradeData.status,
+          tradeData.ret_entry,
+          tradeData.sd_exit,
+          entry,
+          stop,
+          target,
+          exit,
+          stopTicks,
+          potResult,
+          result,
+          preparation,
+          entryScore,
+          stopLoss,
+          targetScore,
+          management,
+          rules,
+          average,
+          tradeData.planned_executed,
+          tradeData.account_id,
+          tradeData.backtest_id,
+          id
+        ];
+        
+        await db.run(sql, params);
+        
+        // Update documentation if provided
+        if (tradeData.trade_journal !== undefined || tradeData.body_mind_state !== undefined) {
+          await this.updateDocumentation(id, {
+            trade_journal: tradeData.trade_journal,
+            body_mind_state: tradeData.body_mind_state
+          });
+        }
+        
+        // Update confluences if provided
+        if (tradeData.confluences !== undefined) {
+          await this.updateConfluences(id, tradeData.confluences);
+        }
+        
+        return await this.getById(id);
       }
-      
-      // Update the trade
-      const sql = `
-        UPDATE trades SET
-          date = COALESCE(?, date),
-          day = ?,
-          confirmation_time = COALESCE(?, confirmation_time),
-          entry_time = COALESCE(?, entry_time),
-          instrument_id = COALESCE(?, instrument_id),
-          confirmation_type = COALESCE(?, confirmation_type),
-          direction = COALESCE(?, direction),
-          session = COALESCE(?, session),
-          entry_method_id = COALESCE(?, entry_method_id),
-          stopped_out = COALESCE(?, stopped_out),
-          status = COALESCE(?, status),
-          ret_entry = COALESCE(?, ret_entry),
-          sd_exit = COALESCE(?, sd_exit),
-          entry = COALESCE(?, entry),
-          stop = COALESCE(?, stop),
-          target = COALESCE(?, target),
-          exit = ?,
-          stop_ticks = ?,
-          pot_result = ?,
-          result = ?,
-          preparation = COALESCE(?, preparation),
-          entry_score = COALESCE(?, entry_score),
-          stop_loss = COALESCE(?, stop_loss),
-          target_score = COALESCE(?, target_score),
-          management = COALESCE(?, management),
-          rules = COALESCE(?, rules),
-          average = ?,
-          planned_executed = COALESCE(?, planned_executed),
-          account_id = COALESCE(?, account_id)
-        WHERE id = ?
-      `;
-      
-      const params = [
-        tradeData.date,
-        day,
-        tradeData.confirmation_time,
-        tradeData.entry_time,
-        tradeData.instrument_id,
-        tradeData.confirmation_type,
-        tradeData.direction,
-        tradeData.session,
-        tradeData.entry_method_id,
-        tradeData.stopped_out !== undefined ? (tradeData.stopped_out ? 1 : 0) : currentTrade.stopped_out,
-        tradeData.status,
-        tradeData.ret_entry,
-        tradeData.sd_exit,
-        entry,
-        stop,
-        target,
-        exit,
-        stopTicks,
-        potResult,
-        result,
-        preparation,
-        entryScore,
-        stopLoss,
-        targetScore,
-        management,
-        rules,
-        average,
-        tradeData.planned_executed,
-        tradeData.account_id,
-        id
-      ];
-      
-      await db.run(sql, params);
-      
-      // Update documentation if provided
-      if (tradeData.trade_journal !== undefined || tradeData.body_mind_state !== undefined) {
-        await this.updateDocumentation(id, {
-          trade_journal: tradeData.trade_journal,
-          body_mind_state: tradeData.body_mind_state
-        });
-      }
-      
-      // Update confluences if provided
-      if (tradeData.confluences !== undefined) {
-        await this.updateConfluences(id, tradeData.confluences);
-      }
-      
-      return await this.getById(id);
     } catch (error) {
       console.error('Error updating trade:', error);
       throw error;

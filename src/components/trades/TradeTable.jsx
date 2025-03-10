@@ -95,9 +95,17 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
       // Find the original trade
       const trade = trades.find(t => t.id === id);
       if (!trade) return;
+
+      // Format the value depending on the field type
+      let formattedValue = value;
+      
+      // Handle date objects - convert to YYYY-MM-DD format
+      if (field === 'date' && value instanceof Date) {
+        formattedValue = value.toISOString().split('T')[0];
+      }
       
       // Create an update object with just the changed field
-      const updateData = { [field]: value };
+      const updateData = { [field]: formattedValue };
       
       // Send the update to the backend
       await onUpdate(id, updateData);
@@ -183,7 +191,17 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
   const columns = [
     actionsColumn,
     { field: 'day', headerName: 'Day', width: 60 },
-    { field: 'date', headerName: 'Date', width: 110, editable: true, type: 'date' },
+    { 
+    field: 'date', 
+    headerName: 'Date', 
+    width: 110, 
+    editable: true, 
+    type: 'date',
+    valueGetter: (params) => {
+      // Convert string date to Date object
+      return params.value ? new Date(params.value) : null;
+    }
+  },
     { field: 'confirmation_time', headerName: 'Conf Time', width: 90, editable: true },
     { field: 'entry_time', headerName: 'Entry Time', width: 90, editable: true },
     { field: 'instrument', headerName: 'Instrument', width: 100 },
@@ -243,8 +261,11 @@ const TradeTable = ({ trades, onSelect, onUpdate, onDelete }) => {
         disableRowSelectionOnClick
         getCellClassName={getCellClassName}
         editMode="cell"
-        processRowUpdate={(newRow, oldRow) => newRow}
-        onCellEditStop={handleCellEditCommit}
+        onCellEditStop={params => {
+          if (params.reason === 'enterKeyDown' || params.reason === 'tabKeyDown' || params.reason === 'cellFocusOut') {
+            handleCellEditCommit(params);
+          }
+        }}
         sx={{
           '& .positive-result': { color: 'green' },
           '& .negative-result': { color: 'red' },
