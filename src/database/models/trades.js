@@ -14,7 +14,7 @@ class TradeModel {
         direction: 'Long', // Default direction
         session: 'ODR', // Default session
         status: '', // Default status is now empty
-        stopped_out: 0, // Default stopped_out (false)
+        stopped_out: false, // Default stopped_out (false)
         planned_executed: 'Planned', // Default execution status
       };
   
@@ -55,8 +55,13 @@ class TradeModel {
       if (!tradeData.stop) tradeData.stop = 0;
       if (!tradeData.target) tradeData.target = 0;
   
+
+      // Get instrument details for calculations
+      const instrumentDetails = await this.getInstrumentDetails(tradeData.instrument_id);
+      const tickValue = instrumentDetails.tick_value;
+
       // Calculate stop_ticks, pot_result, and average
-      const stopTicks = Math.abs(tradeData.entry - tradeData.stop) / (await this.getTickValue(tradeData.instrument_id));
+      const stopTicks = Math.abs(tradeData.entry - tradeData.stop) / tickValue;
       const potResult = tradeData.entry !== tradeData.stop ? 
         Math.abs(tradeData.target - tradeData.entry) / Math.abs(tradeData.entry - tradeData.stop) : 0;
   
@@ -410,7 +415,9 @@ async update(id, tradeData) {
         
         // Recalculate dependent fields if possible
         const instrumentId = currentTrade.instrument_id;
-        const tickValue = await this.getTickValue(instrumentId);
+        // Get instrument details for calculations
+        const instrumentDetails = await this.getInstrumentDetails(tradeData.instrument_id);
+        const tickValue = instrumentDetails.tick_value;
         
         // Only calculate if we have valid values
         if (entry && stop && tickValue) {
@@ -441,6 +448,11 @@ async update(id, tradeData) {
           await db.run(sql, [fieldValue, day, stopTicks, potResult, result, id]);
           
           // Return updated trade
+          return await this.getById(id);
+        }
+        if (fieldName === 'stopped_out'){
+          const sql = `UPDATE trades SET ${fieldName} = ? WHERE id = ?`;
+          await db.run(sql, [fieldValue ? 1 : 0, id]); // Convert to 0/1 for SQLite
           return await this.getById(id);
         }
       }
@@ -485,7 +497,9 @@ async update(id, tradeData) {
       const exit = tradeData.exit !== undefined ? parseFloat(tradeData.exit) : parseFloat(currentTrade.exit);
       
       const instrumentId = tradeData.instrument_id || currentTrade.instrument_id;
-      const tickValue = await this.getTickValue(instrumentId);
+      // Get instrument details for calculations
+      const instrumentDetails = await this.getInstrumentDetails(tradeData.instrument_id);
+      const tickValue = instrumentDetails.tick_value;
       
       // Calculate stop_ticks - ensure these values are set to prevent NULL
       let stopTicks = 0;
@@ -719,10 +733,10 @@ async update(id, tradeData) {
   }
   
   // Get tick value for an instrument
-  async getTickValue(instrumentId) {
+  async getInstrumentDetails(instrumentId) {
     try {
       const instrument = await db.get(
-        'SELECT tick_value FROM instruments WHERE id = ?',
+        'SELECT tick_value, dollars_per_tick FROM instruments WHERE id = ?',
         [instrumentId]
       );
       
@@ -730,9 +744,9 @@ async update(id, tradeData) {
         throw new Error(`Instrument with ID ${instrumentId} not found`);
       }
       
-      return instrument.tick_value;
+      return instrument;
     } catch (error) {
-      console.error('Error getting instrument tick value:', error);
+      console.error('Error getting instrument details:', error);
       throw error;
     }
   }
@@ -788,7 +802,9 @@ async update(id, tradeData) {
         0
       );
       
-      const winRate = totalTrades > 0 ? (winners / totalTrades) * 100 : 0;
+      // Instead of using totalTrades, calculate non-break-even trades for winrate
+      const tradesForWinRate = totalTrades - breakEvens;
+      const winRate = tradesForWinRate > 0 ? (winners / tradesForWinRate) * 100 : 0;
       
       const winningTrades = allTrades.filter(trade => trade.status === 'Winner');
       const averageWin = winningTrades.length > 0
@@ -812,7 +828,7 @@ async update(id, tradeData) {
         chickenOutCount,
         missedR,
         winRate,
-        winRateBasedOn: totalTrades,
+        winRateBasedOn: tradesForWinRate,
         averageWin,
         averageMetricsScore,
         metricsBasedOn: tradesWithMetrics.length

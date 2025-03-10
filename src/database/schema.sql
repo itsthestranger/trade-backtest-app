@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS instruments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     tick_value REAL NOT NULL,
+    dollars_per_tick REAL NOT NULL DEFAULT 1.0,
     color TEXT NOT NULL
 );
 

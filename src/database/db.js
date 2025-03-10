@@ -106,6 +106,20 @@ class Database {
     } catch (err) {
         console.error('Error during migration:', err);
     }
+    // Then, check if we need to add the dollars_per_tick column
+    try {
+      // Check if dollars_per_tick column exists
+      const instrumentsTableInfo = await this.all("PRAGMA table_info(instruments)");
+      const hasDollarsPerTick = instrumentsTableInfo.some(column => column.name === 'dollars_per_tick');
+      
+      if (!hasDollarsPerTick) {
+        console.log('Adding dollars_per_tick column to instruments table...');
+        await this.run('ALTER TABLE instruments ADD COLUMN dollars_per_tick REAL NOT NULL DEFAULT 1.0');
+        console.log('Migration for dollars_per_tick complete');
+      }
+    } catch (err) {
+      console.error('Error during dollars_per_tick migration:', err);
+    }
   }
 
   // Backup the database to a specified path

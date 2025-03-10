@@ -84,14 +84,25 @@ const PositionCalculator = ({ instrumentId, onChange, position }) => {
     
     if (!account) return;
     
+    // Set risk percent from account if not already set
+    if (formState.riskPercent !== account.risk_per_r) {
+      setFormState(prevState => ({
+        ...prevState,
+        riskPercent: account.risk_per_r
+      }));
+      return; // Let the next effect run handle the calculation
+    }
+    
     // Calculate contracts based on risk
     const riskAmount = formState.accountSize * (formState.riskPercent / 100);
     const tickValue = instrumentDetails.tick_value;
+    const dollarsPerTick = instrumentDetails.dollars_per_tick;
     
     let calculatedContracts = 0;
     
-    if (formState.stopTicks > 0 && tickValue > 0) {
-      calculatedContracts = Math.floor(riskAmount / (formState.stopTicks * tickValue));
+    if (formState.stopTicks > 0 && dollarsPerTick > 0) {
+      // Updated formula: (Account Size * Risk %) / (Stop Ticks * $ per Tick)
+      calculatedContracts = Math.floor(riskAmount / (formState.stopTicks * dollarsPerTick));
     }
     
     // Calculate R-value
@@ -116,6 +127,7 @@ const PositionCalculator = ({ instrumentId, onChange, position }) => {
       rValue: calculatedRValue
     });
   }, [formState, instrumentDetails, accounts, onChange]);
+
   
   // Handle form changes
   const handleChange = (event) => {
@@ -134,7 +146,7 @@ const PositionCalculator = ({ instrumentId, onChange, position }) => {
         [name]: parsedValue
       };
       
-      // Recalculate stop ticks
+      // Recalculate stop ticks if both entry and stop are valid
       if (newState.entry > 0 && newState.stop > 0) {
         newState.stopTicks = Math.abs(
           Math.round((newState.entry - newState.stop) / instrumentDetails.tick_value)
@@ -145,7 +157,11 @@ const PositionCalculator = ({ instrumentId, onChange, position }) => {
     } else if (name === 'stopTicks' && instrumentDetails && formState.entry > 0) {
       // Recalculate stop price based on entry and stop ticks
       const tickValue = instrumentDetails.tick_value;
-      const stopPrice = formState.entry - (parsedValue * tickValue);
+      // Determine direction: if long, stop is below entry; if short, stop is above entry
+      const isLong = formState.target > formState.entry; // Assume long if target > entry
+      const stopPrice = isLong 
+        ? formState.entry - (parsedValue * tickValue)
+        : formState.entry + (parsedValue * tickValue);
       
       setFormState({
         ...formState,
@@ -153,14 +169,15 @@ const PositionCalculator = ({ instrumentId, onChange, position }) => {
         stop: stopPrice
       });
     } else if (name === 'accountId' && accounts.length > 0) {
-      // Update account size when account changes
+      // Update account size and risk percent when account changes
       const account = accounts.find(a => a.id === parsedValue);
       
       if (account) {
         setFormState({
           ...formState,
           accountId: parsedValue,
-          accountSize: account.size
+          accountSize: account.size,
+          riskPercent: account.risk_per_r // Auto-fill risk percent from account
         });
       } else {
         setFormState({
@@ -360,6 +377,9 @@ const PositionCalculator = ({ instrumentId, onChange, position }) => {
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Tick Value: {instrumentDetails.tick_value}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    $ per Tick: ${instrumentDetails.dollars_per_tick}
                   </Typography>
                 </CardContent>
               </Card>

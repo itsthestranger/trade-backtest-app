@@ -189,7 +189,7 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
           formattedValue = entryMethod.id;
         }
       } else if (field === 'stopped_out') {
-        formattedValue = value === 'Yes';
+        formattedValue = value === 'True';
       }
       
       // Create an update object with just the changed field
@@ -325,7 +325,7 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
     session: trade.session,
     entry_method: trade.entry_method_name,
     entry_method_id: trade.entry_method_id,
-    stopped_out: trade.stopped_out ? 'Yes' : 'No',
+    stopped_out: trade.stopped_out ? 'True' : 'False',
     status: trade.status,
     ret_entry: trade.ret_entry,
     sd_exit: trade.sd_exit,
@@ -420,10 +420,7 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
       width: 100, 
       editable: true,
       type: 'singleSelect',
-      valueOptions: ['Yes', 'No'],
-      renderEditCell: (params) => (
-        <StoppedOutCell {...params} />
-      )
+      valueOptions: ['True', 'False']
     },
     { 
       field: 'status', 
@@ -654,16 +651,24 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
               </Grid>
               
               <Grid item xs={12} md={4}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={currentTrade.stopped_out || false}
-                      onChange={handleFormChange}
-                      name="stopped_out"
-                    />
-                  }
-                  label="Stopped Out"
-                />
+                <FormControl fullWidth>
+                  <InputLabel>Stopped Out</InputLabel>
+                  <Select
+                    name="stopped_out"
+                    value={currentTrade.stopped_out ? 'True' : 'False'}
+                    onChange={(e) => handleFormChange({
+                      target: {
+                        name: 'stopped_out',
+                        type: 'checkbox',
+                        checked: e.target.value === 'True'
+                      }
+                    })}
+                    label="Stopped Out"
+                  >
+                    <MenuItem value="True">True</MenuItem>
+                    <MenuItem value="False">False</MenuItem>
+                  </Select>
+                </FormControl>
               </Grid>
               
               <Grid item xs={12} md={4}>

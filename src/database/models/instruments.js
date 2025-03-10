@@ -21,13 +21,15 @@ class InstrumentModel {
         INSERT INTO instruments (
           name,
           tick_value,
+          dollars_per_tick,
           color
-        ) VALUES (?, ?, ?)
+        ) VALUES (?, ?, ?, ?)
       `;
       
       const params = [
         instrumentData.name,
         instrumentData.tick_value,
+        instrumentData.dollars_per_tick || 1.0, // Default to 1.0 if not provided
         instrumentData.color || '#1976d2'
       ];
       
@@ -94,6 +96,7 @@ class InstrumentModel {
         UPDATE instruments SET
           name = COALESCE(?, name),
           tick_value = COALESCE(?, tick_value),
+          dollars_per_tick = COALESCE(?, dollars_per_tick),
           color = COALESCE(?, color)
         WHERE id = ?
       `;
@@ -101,6 +104,7 @@ class InstrumentModel {
       const params = [
         instrumentData.name,
         instrumentData.tick_value,
+        instrumentData.dollars_per_tick,
         instrumentData.color,
         id
       ];

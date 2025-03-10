@@ -40,6 +40,7 @@ const InstrumentSettings = () => {
   const initialFormState = {
     name: '',
     tick_value: '',
+    dollars_per_tick: '',
     color: '#1976d2'
   };
   
@@ -90,6 +91,12 @@ const InstrumentSettings = () => {
       errors.tick_value = 'Tick value must be greater than 0';
     }
     
+    if (!formState.dollars_per_tick || isNaN(formState.dollars_per_tick)) {
+      errors.dollars_per_tick = '$ per Tick must be a number';
+    } else if (parseFloat(formState.dollars_per_tick) <= 0) {
+      errors.dollars_per_tick = '$ per Tick must be greater than 0';
+    }
+    
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -108,6 +115,7 @@ const InstrumentSettings = () => {
     setFormState({
       name: instrument.name,
       tick_value: instrument.tick_value.toString(),
+      dollars_per_tick: instrument.dollars_per_tick.toString(),
       color: instrument.color
     });
     setFormErrors({});
@@ -132,6 +140,7 @@ const InstrumentSettings = () => {
         await updateInstrument(currentInstrument.id, {
           name: formState.name.trim(),
           tick_value: parseFloat(formState.tick_value),
+          dollars_per_tick: parseFloat(formState.dollars_per_tick),
           color: formState.color
         });
       } else {
@@ -139,6 +148,7 @@ const InstrumentSettings = () => {
         await addInstrument({
           name: formState.name.trim(),
           tick_value: parseFloat(formState.tick_value),
+          dollars_per_tick: parseFloat(formState.dollars_per_tick),
           color: formState.color
         });
       }
@@ -154,6 +164,7 @@ const InstrumentSettings = () => {
       });
     }
   };
+  
   
   // Handle confirm delete
   const handleConfirmDelete = async () => {
@@ -199,6 +210,7 @@ const InstrumentSettings = () => {
               <TableRow>
                 <TableCell>Name</TableCell>
                 <TableCell align="right">Tick Value</TableCell>
+                <TableCell align="right">$ per Tick</TableCell>
                 <TableCell align="center">Color</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -210,6 +222,7 @@ const InstrumentSettings = () => {
                     {instrument.name}
                   </TableCell>
                   <TableCell align="right">{instrument.tick_value}</TableCell>
+                  <TableCell align="right">${instrument.dollars_per_tick}</TableCell>
                   <TableCell align="center">
                     <Box 
                       sx={{ 
@@ -281,6 +294,21 @@ const InstrumentSettings = () => {
                 fullWidth
                 error={!!formErrors.tick_value}
                 helperText={formErrors.tick_value}
+                inputProps={{ step: 'any' }}
+                required
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                label="$ per Tick"
+                name="dollars_per_tick"
+                type="number"
+                value={formState.dollars_per_tick}
+                onChange={handleChange}
+                fullWidth
+                error={!!formErrors.dollars_per_tick}
+                helperText={formErrors.dollars_per_tick}
                 inputProps={{ step: 'any' }}
                 required
               />
