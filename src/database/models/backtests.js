@@ -6,15 +6,16 @@ class BacktestModel {
   // Create a new backtest
   async create(backtestData) {
     try {
-      // Insert the backtest
       const sql = `
         INSERT INTO backtests (
-          name
-        ) VALUES (?)
+          name,
+          info
+        ) VALUES (?, ?)
       `;
       
       const params = [
-        backtestData.name
+        backtestData.name,
+        backtestData.info || null
       ];
       
       const { id } = await db.run(sql, params);
@@ -95,12 +96,14 @@ class BacktestModel {
       // Update the backtest
       const sql = `
         UPDATE backtests SET
-          name = COALESCE(?, name)
+          name = COALESCE(?, name),
+          info = COALESCE(?, info)
         WHERE id = ?
       `;
       
       const params = [
         backtestData.name,
+        backtestData.info,
         id
       ];
       

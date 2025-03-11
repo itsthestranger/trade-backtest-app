@@ -98,9 +98,9 @@ CREATE TABLE IF NOT EXISTS trade_confluences (
 -- Backtests Table
 CREATE TABLE IF NOT EXISTS backtests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE,
+    info TEXT
 );
-
 -- Backtest Confluences Junction Table
 CREATE TABLE IF NOT EXISTS backtest_confluences (
     backtest_id INTEGER NOT NULL,

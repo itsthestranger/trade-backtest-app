@@ -30,6 +30,7 @@ import BacktestTable from './BacktestTable';
 import Filters from './Filters';
 import DocumentationView from './DocumentationView';
 import PerformanceReport from './PerformanceReport';
+import BacktestDetailsPanel from './BacktestDetailsPanel';
 
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
@@ -59,6 +60,7 @@ const Backtest = () => {
   const [filterDialogOpen, setFilterDialogOpen] = useState(false);
   const [backtestForm, setBacktestForm] = useState({
     name: '',
+    info: '',
     confluences: []
   });
   const [viewMode, setViewMode] = useState('table'); // 'table', 'documentation', 'performance'
@@ -183,7 +185,8 @@ const Backtest = () => {
       
       // Create new backtest
       const newBacktest = await db.createBacktest({
-        name: backtestForm.name,
+        name: backtestForm.name.trim(),
+        info: backtestForm.info,
         confluences: backtestForm.confluences
       });
       
@@ -196,6 +199,7 @@ const Backtest = () => {
       // Reset form
       setBacktestForm({
         name: '',
+        info: '',
         confluences: []
       });
       
@@ -219,6 +223,28 @@ const Backtest = () => {
       ...backtestForm,
       [name]: value
     });
+  };
+
+  const handleUpdateBacktest = async (id, backtestData) => {
+    try {
+      setIsLoading(true);
+      
+      const updatedBacktest = await db.updateBacktest(id, backtestData);
+      
+      // Update backtests list
+      setBacktests(backtests.map(backtest => 
+        backtest.id === id ? updatedBacktest : backtest
+      ));
+      
+      // Update selected backtest
+      setSelectedBacktest(updatedBacktest);
+      
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error updating backtest:', error);
+      setError('Failed to update backtest. Please try again.');
+      setIsLoading(false);
+    }
   };
   
   // Handle confluences selection changes
@@ -390,6 +416,16 @@ const Backtest = () => {
             </Box>
           </Paper>
         </Grid>
+
+        {/* Add BacktestDetailsPanel component here */}
+        {selectedBacktest && (
+          <Grid item xs={12}>
+            <BacktestDetailsPanel 
+              backtest={selectedBacktest} 
+              onUpdate={handleUpdateBacktest}
+            />
+          </Grid>
+        )}
         
         <Grid item xs={12}>
           <Paper sx={{ width: '100%' }}>
@@ -436,7 +472,7 @@ const Backtest = () => {
         <DialogTitle>Create New Backtest</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Enter a name for your new backtest and select the confluences that apply.
+            Enter information for your new backtest.
           </DialogContentText>
           <TextField
             autoFocus
@@ -447,16 +483,28 @@ const Backtest = () => {
             value={backtestForm.name}
             onChange={handleBacktestFormChange}
             sx={{ mb: 2 }}
+            required
+          />
+          <TextField
+            margin="dense"
+            name="info"
+            label="Info (optional)"
+            fullWidth
+            multiline
+            rows={4}
+            value={backtestForm.info}
+            onChange={handleBacktestFormChange}
+            sx={{ mb: 2 }}
           />
           <FormControl fullWidth>
-            <InputLabel id="confluences-label">Confluences</InputLabel>
+            <InputLabel id="confluences-label">Confluences (optional)</InputLabel>
             <Select
               labelId="confluences-label"
               id="confluences"
               multiple
               value={backtestForm.confluences}
               onChange={handleConfluencesChange}
-              input={<OutlinedInput label="Confluences" />}
+              input={<OutlinedInput label="Confluences (optional)" />}
               renderValue={(selected) => (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                   {selected.map((confluenceId) => {
@@ -479,7 +527,7 @@ const Backtest = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateBacktest} color="primary">
+          <Button onClick={handleCreateBacktest} color="primary" disabled={!backtestForm.name.trim()}>
             Create
           </Button>
         </DialogActions>

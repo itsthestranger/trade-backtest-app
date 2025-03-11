@@ -120,6 +120,19 @@ class Database {
     } catch (err) {
       console.error('Error during dollars_per_tick migration:', err);
     }
+    // Check if info column exists in backtests table
+    try {
+      const backtestsTableInfo = await this.all("PRAGMA table_info(backtests)");
+      const hasInfoColumn = backtestsTableInfo.some(column => column.name === 'info');
+      
+      if (!hasInfoColumn) {
+        console.log('Adding info column to backtests table...');
+        await this.run('ALTER TABLE backtests ADD COLUMN info TEXT');
+        console.log('Migration for backtests info column complete');
+      }
+    } catch (err) {
+      console.error('Error during backtests info column migration:', err);
+    }
   }
 
   // Backup the database to a specified path

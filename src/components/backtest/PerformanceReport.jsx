@@ -66,8 +66,13 @@ const PerformanceReport = ({ trades, filter }) => {
         const breakEven = trades.filter(
           trade => trade.result !== null && Math.abs(trade.result) < 0.1
         ).length;
+
+        // Exclude break-even trades from winrate calculation
+        const totalTradesForWinrate = trades.filter(
+          t => t.status === 'Winner' || t.status === 'Expense'
+        ).length;
         
-        const winRate = totalTrades > 0 ? (winners / totalTrades) * 100 : 0;
+        const winRate = totalTradesForWinrate > 0 ? (winners / totalTradesForWinrate) * 100 : 0;
         
         // Calculate consecutive stats
         let currentWinStreak = 0;
@@ -143,7 +148,10 @@ const PerformanceReport = ({ trades, filter }) => {
           const sessionBreakEven = sessionTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const sessionWinRate = sessionTrades.length > 0 ? (sessionWinners / sessionTrades.length) * 100 : 0;
+
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForSessionWinrate = sessionWinners + sessionExpenses
+          const sessionWinRate = totalTradesForSessionWinrate > 0 ? (sessionWinners / totalTradesForSessionWinrate) * 100 : 0;
           const sessionResult = sessionTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           return {
@@ -166,7 +174,9 @@ const PerformanceReport = ({ trades, filter }) => {
           const instrumentBreakEven = instrumentTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const instrumentWinRate = instrumentTrades.length > 0 ? (instrumentWinners / instrumentTrades.length) * 100 : 0;
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForInstrumentWinrate = instrumentWinners + instrumentExpenses
+          const instrumentWinRate = totalTradesForInstrumentWinrate > 0 ? (instrumentWinners / totalTradesForInstrumentWinrate) * 100 : 0;
           const instrumentResult = instrumentTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           return {
@@ -189,7 +199,9 @@ const PerformanceReport = ({ trades, filter }) => {
           const typeBreakEven = typeTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const typeWinRate = typeTrades.length > 0 ? (typeWinners / typeTrades.length) * 100 : 0;
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForTypeWinrate = typeWinners + typeExpenses
+          const typeWinRate = totalTradesForTypeWinrate > 0 ? (typeWinners / totalTradesForTypeWinrate) * 100 : 0;
           const typeResult = typeTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           return {
@@ -212,7 +224,9 @@ const PerformanceReport = ({ trades, filter }) => {
           const methodBreakEven = methodTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const methodWinRate = methodTrades.length > 0 ? (methodWinners / methodTrades.length) * 100 : 0;
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForMethodWinrate = methodWinners + methodExpenses
+          const methodWinRate = totalTradesForMethodWinrate > 0 ? (methodWinners / totalTradesForMethodWinrate) * 100 : 0;
           const methodResult = methodTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           return {
@@ -235,7 +249,9 @@ const PerformanceReport = ({ trades, filter }) => {
           const dayBreakEven = dayTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const dayWinRate = dayTrades.length > 0 ? (dayWinners / dayTrades.length) * 100 : 0;
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForDayWinrate = dayWinners + dayExpenses
+          const dayWinRate = totalTradesForDayWinrate > 0 ? (dayWinners / totalTradesForDayWinrate) * 100 : 0;
           const dayResult = dayTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           return {
@@ -363,7 +379,9 @@ const PerformanceReport = ({ trades, filter }) => {
           const rangeBreakEven = rangeTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const rangeWinRate = rangeTrades.length > 0 ? (rangeWinners / rangeTrades.length) * 100 : 0;
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForRangeWinrate = rangeWinners + rangeExpenses
+          const rangeWinRate = totalTradesForRangeWinrate > 0 ? (rangeWinners / totalTradesForRangeWinrate) * 100 : 0;
           const rangeResult = rangeTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           return {
@@ -388,7 +406,9 @@ const PerformanceReport = ({ trades, filter }) => {
           const monthBreakEven = monthTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const monthWinRate = monthTrades.length > 0 ? (monthWinners / monthTrades.length) * 100 : 0;
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForMonthWinrate = monthWinners + monthExpenses
+          const monthWinRate = totalTradesForMonthWinrate > 0 ? (monthWinners / totalTradesForMonthWinrate) * 100 : 0;
           const monthResult = monthTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           // Format month label (YYYY-MM to Month YYYY)
@@ -469,7 +489,7 @@ const PerformanceReport = ({ trades, filter }) => {
           }
           
           timeGroup.result += trade.result || 0;
-          timeGroup.winRate = (timeGroup.winners / timeGroup.trades) * 100;
+          timeGroup.winRate = (timeGroup.winners + timeGroup.expenses) > 0 ? (timeGroup.winners / (timeGroup.winners + timeGroup.expenses)) * 100 : 0;
         });
         
         // Sort by time
@@ -492,7 +512,9 @@ const PerformanceReport = ({ trades, filter }) => {
           const directionBreakEven = directionTrades.filter(
             trade => trade.result !== null && Math.abs(trade.result) < 0.1
           ).length;
-          const directionWinRate = directionTrades.length > 0 ? (directionWinners / directionTrades.length) * 100 : 0;
+          // Exclude break-even trades from winrate calculation
+          const totalTradesForDirectionWinrate = directionWinners + directionExpenses
+          const directionWinRate = totalTradesForDirectionWinrate > 0 ? (directionWinners / totalTradesForDirectionWinrate) * 100 : 0;
           const directionResult = directionTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
           
           // Details by day
@@ -503,7 +525,9 @@ const PerformanceReport = ({ trades, filter }) => {
             const dayBreakEven = dayTrades.filter(
               trade => trade.result !== null && Math.abs(trade.result) < 0.1
             ).length;
-            const dayWinRate = dayTrades.length > 0 ? (dayWinners / dayTrades.length) * 100 : 0;
+            // Exclude break-even trades from winrate calculation
+            const totalTradesForDayWinrate = dayWinners + dayExpenses
+            const dayWinRate = totalTradesForDayWinrate > 0 ? (dayWinners / totalTradesForDayWinrate) * 100 : 0;
             const dayResult = dayTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
             
             // Details by session
@@ -514,7 +538,9 @@ const PerformanceReport = ({ trades, filter }) => {
               const sessionBreakEven = sessionTrades.filter(
                 trade => trade.result !== null && Math.abs(trade.result) < 0.1
               ).length;
-              const sessionWinRate = sessionTrades.length > 0 ? (sessionWinners / sessionTrades.length) * 100 : 0;
+              // Exclude break-even trades from winrate calculation
+              const totalTradesForSessionWinrate = sessionWinners + sessionExpenses
+              const sessionWinRate = totalTradesForSessionWinrate > 0 ? (sessionWinners / totalTradesForSessionWinrate) * 100 : 0;
               const sessionResult = sessionTrades.reduce((sum, trade) => sum + (trade.result || 0), 0);
               
               return {
