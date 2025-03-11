@@ -302,6 +302,12 @@ class TradeModel {
           whereConditions.push('t.direction = ?');
           params.push(filters.direction);
         }
+
+        // Confirmation time
+        if (filters.confirmation_time) {
+          whereConditions.push('t.confirmation_time = ?');
+          params.push(filters.confirmation_time);
+        }
         
         // Status
         if (filters.status) {

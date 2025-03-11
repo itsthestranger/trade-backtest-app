@@ -232,11 +232,26 @@ const TradePlanner = ({ onCreateTrade, onClose }) => {
           const playbook = instrumentPlaybooks[0];
           const playbookEntries = await db.getPlaybook(playbook.id);
           
-          const matchingEntry = playbookEntries.entries.find(entry => 
-            entry.day === formState.day &&
-            entry.direction === formState.direction &&
-            entry.confirmation_time === confirmationTime
-          );
+          // Helper function to convert time string to minutes since midnight
+          const parseTimeToMinutes = (timeStr) => {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+          };
+          
+          const confirmationMinutes = parseTimeToMinutes(confirmationTime);
+          
+          const matchingEntry = playbookEntries.entries.find(entry => {
+            // Check day and direction first
+            if (entry.day !== formState.day || entry.direction !== formState.direction) {
+              return false;
+            }
+            
+            // Check if confirmationTime is within 30-minute window of entry.confirmation_time
+            const entryStartMinutes = parseTimeToMinutes(entry.confirmation_time);
+            const entryEndMinutes = entryStartMinutes + 30; // 30-minute window
+            
+            return confirmationMinutes >= entryStartMinutes && confirmationMinutes < entryEndMinutes;
+          });
           
           setPlaybookData(matchingEntry || null);
         } else {
