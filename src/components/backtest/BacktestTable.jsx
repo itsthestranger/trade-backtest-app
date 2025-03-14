@@ -298,11 +298,11 @@ const BacktestTable = ({ trades, onUpdate, onDelete }) => {
         label="Edit"
         onClick={() => handleEdit(params.row.raw)}
       />,
-      <GridActionsCellItem
+      /*<GridActionsCellItem
         icon={<DuplicateIcon />}
         label="Duplicate" 
         onClick={() => handleDuplicate(params.row.raw)}
-      />,
+      />,*/
       <GridActionsCellItem
         icon={<DeleteIcon />}
         label="Delete"

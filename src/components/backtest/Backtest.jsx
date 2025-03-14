@@ -23,7 +23,7 @@ import {
   Divider,
   OutlinedInput
 } from '@mui/material';
-import { Add as AddIcon, FilterList as FilterIcon } from '@mui/icons-material';
+import { Add as AddIcon, FilterList as FilterIcon, CloudUpload as CloudUploadIcon } from '@mui/icons-material';
 import { useDatabase } from '../../contexts/DatabaseContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import BacktestTable from './BacktestTable';
@@ -31,6 +31,7 @@ import Filters from './Filters';
 import DocumentationView from './DocumentationView';
 import PerformanceReport from './PerformanceReport';
 import BacktestDetailsPanel from './BacktestDetailsPanel';
+import ImportTradesDialog from './ImportTradesDialog';
 
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
@@ -54,6 +55,7 @@ const Backtest = () => {
   const [selectedBacktest, setSelectedBacktest] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -105,6 +107,23 @@ const Backtest = () => {
     loadData();
   }, [db, dbLoading, settingsLoading, selectedBacktest]);
   
+  
+// function to refresh trades after import
+  const refreshTrades = async () => {
+    if (selectedBacktest) {
+      try {
+        setIsLoading(true);
+        const tradesData = await db.getTrades({ backtest_id: selectedBacktest.id });
+        setTrades(tradesData);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error refreshing trades:', error);
+        setError('Failed to refresh trades. Please try again.');
+        setIsLoading(false);
+      }
+    }
+  };
+
   // Handle tab change
   const handleTabChange = async (event, newValue) => {
     setSelectedTab(newValue);
@@ -402,16 +421,25 @@ const Backtest = () => {
               </FormControl>
               
               {selectedBacktest && (
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={() => handleTradeCreate({
-                    date: new Date().toISOString().split('T')[0],
-                    backtest_id: selectedBacktest.id
-                  })}
-                >
-                  Add Trade
-                </Button>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => handleTradeCreate({
+                      date: new Date().toISOString().split('T')[0],
+                      backtest_id: selectedBacktest.id
+                    })}
+                  >
+                    Add Trade
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<CloudUploadIcon />}
+                    onClick={() => setImportDialogOpen(true)}
+                  >
+                    Import Trades
+                  </Button>
+                </Box>
               )}
             </Box>
           </Paper>
@@ -551,6 +579,12 @@ const Backtest = () => {
           <Button onClick={() => setFilterDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+      <ImportTradesDialog
+        open={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        backtestId={selectedBacktest?.id}
+        onImportComplete={refreshTrades}
+      />
     </Box>
   );
 };
